@@ -1,0 +1,155 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Product {
+  id        Int      @id @default(autoincrement())
+  name      String
+  cat       String
+  price     Int
+  wasPrice  Int?
+  imgId     String
+  colors    String // JSON-encoded string[]
+  tags      String // JSON-encoded string[]
+  rating    String
+  reviews   Int      @default(0)
+  stock     Int      @default(0) // maintained aggregate = sum(variants.stock)
+  sku       String   @unique
+  desc      String   @default("")
+  ord       Int      @default(0)
+  variants  ProductVariant[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ProductVariant {
+  id        Int     @id @default(autoincrement())
+  product   Product @relation(fields: [productId], references: [id])
+  productId Int
+  size      String
+  color     String
+  stock     Int     @default(0)
+
+  @@unique([productId, size, color])
+}
+
+model AdminUser {
+  id           Int    @id @default(autoincrement())
+  username     String @unique
+  passwordHash String
+  role         String @default("owner")
+}
+
+model DiscountCode {
+  id           Int       @id @default(autoincrement())
+  code         String    @unique
+  type         String // "percent" | "fixed"
+  value        Int
+  active       Boolean   @default(true)
+  minSubtotal  Int       @default(0)
+  usageLimit   Int?
+  usedCount    Int       @default(0)
+  expiresAt    DateTime?
+  createdAt    DateTime  @default(now())
+}
+
+model Order {
+  id              Int         @id @default(autoincrement())
+  orderNumber     String      @unique
+  email           String
+  name            String
+  addressLine1    String
+  addressLine2    String      @default("")
+  city            String
+  region          String
+  postalCode      String
+  country         String
+  phone           String      @default("")
+  subtotal        Int
+  shipping        Int
+  tax             Float
+  total           Float
+  status          String      @default("Processing")
+  paymentStatus   String      @default("paid")
+  paymentProvider String      @default("test-mode")
+  paymentRef      String      @default("")
+  discountCode    String      @default("")
+  discountAmount  Float       @default(0)
+  carrier         String      @default("")
+  trackingNumber  String      @default("")
+  items           OrderItem[]
+  customer        Customer?   @relation(fields: [customerId], references: [id])
+  customerId      Int?
+  createdAt       DateTime    @default(now())
+}
+
+model Customer {
+  id           Int                @id @default(autoincrement())
+  email        String             @unique
+  name         String
+  passwordHash String
+  addresses    Address[]
+  wishlist     WishlistItem[]
+  orders       Order[]
+  resetTokens  PasswordResetToken[]
+  createdAt    DateTime           @default(now())
+}
+
+model Address {
+  id           Int      @id @default(autoincrement())
+  customer     Customer @relation(fields: [customerId], references: [id])
+  customerId   Int
+  label        String   @default("")
+  addressLine1 String
+  addressLine2 String   @default("")
+  city         String
+  region       String
+  postalCode   String
+  country      String
+  phone        String   @default("")
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+}
+
+model WishlistItem {
+  id         Int      @id @default(autoincrement())
+  customer   Customer @relation(fields: [customerId], references: [id])
+  customerId Int
+  productId  Int
+  createdAt  DateTime @default(now())
+
+  @@unique([customerId, productId])
+}
+
+model PasswordResetToken {
+  id         Int      @id @default(autoincrement())
+  customer   Customer @relation(fields: [customerId], references: [id])
+  customerId Int
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+}
+
+model OrderItem {
+  id        Int    @id @default(autoincrement())
+  order     Order  @relation(fields: [orderId], references: [id])
+  orderId   Int
+  productId Int
+  name      String
+  sku       String
+  size      String
+  color     String
+  qty       Int
+  unitPrice Int
+}

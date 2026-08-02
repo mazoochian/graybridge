@@ -1,0 +1,22 @@
+/node_modules
+/.next
+/out
+/build
+next-env.d.ts
+*.tsbuildinfo
+.DS_Store
+.env
+.env.local
+.admin-credentials.local.txt
+/prisma/dev.db
+/prisma/dev.db-journal
+/lib/generated
+/public/uploads
+/local-mail
+
+# Auto-installed skill bundles (regenerated from skills-lock.json)
+/.agents/skills
+/.claude/skills
+/.windsurf/skills
+
+/lib/generated/prisma

@@ -1,0 +1,105 @@
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500&display=swap");
+
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+body {
+  font-family: "Geist", system-ui, -apple-system, sans-serif;
+  color: #1a1714;
+  background: #faf8f4;
+  -webkit-font-smoothing: antialiased;
+}
+::selection {
+  background: #c2410c;
+  color: #fff;
+}
+input,
+button,
+select,
+textarea {
+  font-family: inherit;
+}
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+}
+
+/* search field active border, mirrors the design's style-focus-within */
+.gb-focus:focus-within {
+  border-color: #1a1714;
+}
+
+@keyframes gbFade {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes gbFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes gbScale {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes gbDrawer {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes gbToast {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  12% {
+    opacity: 1;
+    transform: none;
+  }
+  88% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes gbFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-14px);
+  }
+}
+@keyframes gbSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
