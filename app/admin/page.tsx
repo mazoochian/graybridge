@@ -555,6 +555,34 @@ export default function AdminPage() {
                   />
                 </div>
                 <Hv
+                  as="a"
+                  href="/api/products/export"
+                  css="background:#fff;color:#1a1714;border:1px solid #e0d9cc;padding:10px 16px;border-radius:9px;font-size:14px;font-weight:500;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center"
+                  hover="background:#f7f3ea"
+                >
+                  Export CSV
+                </Hv>
+                <Hv
+                  as="label"
+                  css={`background:#fff;color:#1a1714;border:1px solid #e0d9cc;padding:10px 16px;border-radius:9px;font-size:14px;font-weight:500;white-space:nowrap;display:inline-flex;align-items:center;${
+                    importBusy ? "opacity:.6;cursor:default" : "cursor:pointer"
+                  }`}
+                  hover={importBusy ? "" : "background:#f7f3ea"}
+                >
+                  {importBusy ? "Importing…" : "Import CSV"}
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    disabled={importBusy}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) importCsv(file);
+                      e.target.value = "";
+                    }}
+                    style={s("display:none")}
+                  />
+                </Hv>
+                <Hv
                   as="button"
                   onClick={startNew}
                   css="background:#c2410c;color:#fff;border:none;padding:10px 18px;border-radius:9px;font-size:14px;font-weight:500;cursor:pointer;white-space:nowrap;transition:background .25s"

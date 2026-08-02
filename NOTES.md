@@ -139,16 +139,36 @@ longer uses SQLite/`better-sqlite3`:
   identically to the SQLite run. Test data was deleted afterward — the
   Postgres db is back to a clean 150-product/0-order state.
 
-## What's still just scaffolding / not fully built out
+## CSV product import/export (verified 2026-08-02, this session)
 
-- Customer reviews: `Product.rating`/`Product.reviews` are static seeded
-  numbers: there is no UI anywhere for a customer to submit a review.
-- No analytics/marketing integrations (no email capture beyond order
-  confirmation, no abandoned-cart flow, etc.).
-- CSV import/export for products exists (`/api/products/import|export`,
-  `lib/csv.ts`) and looked complete on inspection, but wasn't smoke-tested
-  in this session — worth a manual check before relying on it for a bulk
-  catalog load.
+Smoke-tested `/api/products/export`, `/api/products/import`, and
+`lib/csv.ts` directly against the Postgres database:
+
+- Export → re-import round trip on the full 150-product catalog: 150/150
+  updated, 0 errors, and a spot-checked product came back byte-identical
+  on every exported field.
+- Bulk-created 2 new products via CSV (including a description field with
+  an embedded comma and escaped quotes, and a `stock=0` edge case) — both
+  created correctly, quoting/escaping handled properly, stock evenly
+  redistributed across the color x size variant grid as designed.
+- Bad rows (missing name on a new product, missing SKU entirely) produced
+  the expected per-row errors without aborting the rest of the batch.
+- Auth is enforced on both endpoints (401 without a session cookie).
+  Malformed/empty CSV files fail with a clear 400, no crash.
+- One real gap found and fixed: the admin UI had no way to trigger either
+  endpoint. `importCsv()` existed in `app/admin/page.tsx` but was never
+  called from any JSX, and there was no export link at all. Added an
+  "Export CSV" link and an "Import CSV" file picker to the Products view
+  toolbar, next to "+ Add product".
+- Known, intentional limitation: CSV only carries a single aggregate
+  `stock` number per product, not a per-size/color breakdown — importing
+  always redistributes stock evenly across that product's variant grid
+  (same `distributeVariants()` logic the original seed uses). Fine for
+  bulk price/tag/description updates; not a way to set uneven per-variant
+  stock levels via CSV. Use the admin form's variant grid for that.
+
+Test data (2 created products) was deleted afterward; catalog is back to
+150 products.
 
 ## Suggested next steps
 
@@ -158,8 +178,14 @@ longer uses SQLite/`better-sqlite3`:
 2. Pick a payment processor and email provider whenever ready — both are
    isolated behind `lib/payment.ts`/`lib/mail.ts` so wiring in a real one
    later shouldn't require touching the checkout/order code.
-3. Verify CSV product import/export before relying on it for a bulk
-   catalog load (see "still scaffolding" above) — not smoke-tested yet.
-4. `git log` starts 2026-08-02 — see the initial commit for the full tree
-   as of the crash recovery, and the migration commit for the Postgres
-   cutover. Everything above is included across those two commits.
+3. `git log` starts 2026-08-02 — see the initial commit for the full tree
+   as of the crash recovery, the Postgres migration commit, and the CSV
+   import/export UI fix. Everything above is included across those
+   commits.
+
+## What's still just scaffolding / not fully built out
+
+- Customer reviews: `Product.rating`/`Product.reviews` are static seeded
+  numbers: there is no UI anywhere for a customer to submit a review.
+- No analytics/marketing integrations (no email capture beyond order
+  confirmation, no abandoned-cart flow, etc.).
