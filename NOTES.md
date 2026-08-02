@@ -71,31 +71,73 @@ the test product/order/discount were deleted again so the seeded
 set up ESLint interactively) — left as-is; `next build`'s own
 type-checking is the effective safety net right now and it's clean.
 
-## Business assumptions made (unwritten anywhere — flag for correction)
+## Business assumptions made (unwritten anywhere) — owner confirmed 2026-08-03
 
-- **Payment: no real processor.** `lib/payment.ts` always "succeeds" in
-  test mode (no Stripe/other keys configured, none found in `.env`).
-  Every order today is `paymentProvider: "test-mode"` and no real money
-  moves. This needs a real processor before this could take real orders.
-- **Email: no provider configured.** `lib/mail.ts` sends via Resend only
-  if `RESEND_API_KEY` is set; otherwise it writes to `local-mail/*.txt`.
-  Currently unconfigured, so all "sent" email today is just local files.
-- **Tax: flat 7% of subtotal, everywhere**, no per-jurisdiction logic
-  (`lib/cart-utils.ts`). Almost certainly wrong for a real US business
-  with real customers — flagged as the biggest hidden liability.
-- **Shipping: flat $8, free at $75+ subtotal**, no carrier integration,
-  no weight/dimension logic, no international rates.
-- **Sizes are fixed at XS/S/M/L/XL for every product** (`lib/catalog.ts`
-  `SIZES`), regardless of category — even for categories where that may
-  not make sense (accessories, etc., if any get added later).
-- **Product photography is Unsplash stock photos** (deterministic seed
-  data) — fine for development, not real product photos.
+These were flagged as assumptions and sent to the project owner; answers
+came back the same day and are recorded here as decisions, not open
+questions anymore.
+
+- **Payment: staying in test-mode for now.** `lib/payment.ts` always
+  "succeeds" (no Stripe/other processor). Confirmed intentional — revisit
+  before taking real orders/money.
+- **Email: staying on the `local-mail/` stub for now.** No provider chosen
+  yet; owner will pick one later. `lib/mail.ts` still sends via Resend
+  automatically if `RESEND_API_KEY` ever gets set — no code change needed
+  when that happens.
+- **Tax: flat 7% of subtotal, everywhere** — confirmed fine as-is, no
+  per-jurisdiction logic needed.
+- **Shipping: flat $8, free at $75+ subtotal** — confirmed fine as-is.
+- **Product scope confirmed**: basic apparel, USD, whole-dollar pricing,
+  fixed XS–XL sizing across all categories.
 - **No refund processing** — an admin can set an order's status to
-  "Refunded" but this is a label only; no money is actually returned
-  since there's no real payment processor behind it yet.
-- **No deployment target has been chosen.** This still runs on SQLite via
-  `better-sqlite3` — fine for one instance/single-writer, would need a
-  real migration (Postgres, etc.) before any multi-instance deployment.
+  "Refunded" but this is a label only; no money actually moves, consistent
+  with staying in test-mode payments.
+- **Deployment target: a VPS, not Vercel** — and the database has been
+  migrated off SQLite to Postgres to support that (see below). Nothing
+  else about the VPS (OS, process manager, reverse proxy, TLS) has been
+  decided yet.
+
+## SQLite → Postgres migration (done 2026-08-02, this session)
+
+Per the owner's deployment decision (VPS, not serverless), the project no
+longer uses SQLite/`better-sqlite3`:
+
+- `prisma/schema.prisma`: `datasource db { provider = "postgresql" }`.
+- `lib/prisma.ts` and `prisma/seed.ts` now build the Prisma Client with
+  `@prisma/adapter-pg` (`PrismaPg`) over a `DATABASE_URL` connection
+  string, instead of `@prisma/adapter-better-sqlite3`.
+- `better-sqlite3` and `@prisma/adapter-better-sqlite3` were removed from
+  `package.json`; `pg` + `@prisma/adapter-pg` (+ `@types/pg`) added.
+- `next.config.mjs`'s `serverComponentsExternalPackages` updated from
+  `better-sqlite3`/`@prisma/adapter-better-sqlite3` to `pg`/`@prisma/adapter-pg`.
+- The old SQLite migration history (4 migrations) doesn't apply to
+  Postgres (different SQL dialect), so it was deleted and replaced with a
+  single fresh baseline migration, `20260802211656_init_postgres`,
+  generated straight from the current schema — there's no production data
+  yet, so nothing was lost by squashing history.
+- `prisma/dev.db` (SQLite file) removed; `.gitignore` entries for it
+  removed since they're no longer relevant.
+- **Local dev Postgres**: a dedicated Docker container was started for
+  this project (`docker run -d --name graybridge-pg -e
+  POSTGRES_USER=graybridge -e POSTGRES_PASSWORD=graybridge_dev_pw -e
+  POSTGRES_DB=graybridge -p 127.0.0.1:5434:5432 postgres:16-alpine`,
+  bound to `127.0.0.1:5434` specifically to avoid colliding with other
+  local projects' Postgres containers on 5432/15432/5433). `.env`'s
+  `DATABASE_URL` points at it. If that container isn't running, start it
+  with `docker start graybridge-pg` (it was created, not just run
+  ephemerally). **This is a local dev convenience only** — the VPS will
+  need its own real Postgres instance; just point `DATABASE_URL` at it
+  and run `npx prisma migrate deploy` there.
+- Re-seeded after the migration (`npx prisma db seed`) — this generated a
+  **new** admin password (the old SQLite-era one no longer exists since
+  the database was rebuilt from scratch). Current credentials are in
+  `.admin-credentials.local.txt` (gitignored).
+- Full smoke test suite (admin login, discount create/validate/apply,
+  product creation with a full variant grid, checkout with per-variant
+  stock decrement + discount usage tracking, confirmation email, admin
+  orders view) was re-run against Postgres end-to-end and passes
+  identically to the SQLite run. Test data was deleted afterward — the
+  Postgres db is back to a clean 150-product/0-order state.
 
 ## What's still just scaffolding / not fully built out
 
@@ -110,10 +152,14 @@ type-checking is the effective safety net right now and it's clean.
 
 ## Suggested next steps
 
-1. Decide on a real payment processor and email provider before any real
-   customer traffic.
-2. Sanity-check the flat tax/shipping model against actual business
-   requirements — this is the part most likely to be legally wrong today.
-3. `git log` starts today — see the initial commit for the full tree as
-   of this recovery. Everything above (variant grid, discounts/admins
-   views, checkout discount UI, image-path fix) is included in it.
+1. Decide the rest of the VPS deployment picture: OS/host, process
+   manager (systemd/pm2/Docker Compose), reverse proxy + TLS, and how
+   Postgres backups/persistence are handled there.
+2. Pick a payment processor and email provider whenever ready — both are
+   isolated behind `lib/payment.ts`/`lib/mail.ts` so wiring in a real one
+   later shouldn't require touching the checkout/order code.
+3. Verify CSV product import/export before relying on it for a bulk
+   catalog load (see "still scaffolding" above) — not smoke-tested yet.
+4. `git log` starts 2026-08-02 — see the initial commit for the full tree
+   as of the crash recovery, and the migration commit for the Postgres
+   cutover. Everything above is included across those two commits.
