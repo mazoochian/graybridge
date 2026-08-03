@@ -1,0 +1,15 @@
+node_modules
+.next
+.git
+.env
+.env.local
+.env.test
+.admin-credentials.local.txt
+local-mail
+public/uploads
+test-results
+playwright-report
+blob-report
+coverage
+npm-debug.log*
+.DS_Store

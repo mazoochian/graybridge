@@ -283,8 +283,192 @@ the test DB is expected to stay empty between runs, but nothing breaks if
 stray rows accumulate since everything is scoped by unique identifiers.
 
 **Not done yet**: no CI wiring (no GitHub Actions/etc. — the repo has no
-git remote configured to run CI against), no component/E2E tests (no
-Playwright installed yet — flagged for the riskier UI-changing items
-later in this same session, e.g. admin order tracking UI, pagination).
-Coverage is deliberately narrow (critical path only) per the plan, not
-exhaustive.
+git remote configured to run CI against). Coverage is deliberately
+narrow (critical path only) per the plan, not exhaustive. Playwright was
+added later in this same session (see below) once the plan reached
+riskier UI-changing items.
+
+### 4. Admin Orders: tracking UI wired up, search/filter/pagination added
+
+`updateOrderTracking()` in `app/admin/page.tsx` existed and worked, but
+no carrier/tracking-number inputs were ever rendered — clicking around
+the Orders view had no way to trigger it. Added the inputs (a Tracking
+column in the orders table). `/api/orders` was also hard-capped at
+`take: 200` with no search/filter/pagination at all. Added `q` (order
+number/name/email), `status`, `page`, `pageSize` query params
+server-side, plus a search box, status filter, and Prev/Next pager in
+the admin UI.
+
+While building the tracking save, found and fixed two real bugs (not
+just test flakiness) via the new e2e coverage:
+- **Request race**: the orders-list fetch effect didn't guard against
+  out-of-order responses — a slower unfiltered request could resolve
+  after a faster filtered one and clobber the results. Fixed with
+  `AbortController`, aborting the previous in-flight request whenever
+  the effect's dependencies change.
+- **Tracking save race**: Carrier and Tracking # saved independently
+  on blur, so tabbing between them could fire two PATCH requests, the
+  earlier one carrying a stale/empty sibling field; if it resolved
+  *after* the complete one it would silently wipe the tracking number.
+  Fixed with a single debounced combined save per order, guarded by a
+  per-order sequence number.
+
+Playwright was bootstrapped in this session specifically for this and
+the next few items — see `playwright.config.ts` / `tests/e2e/`.
+
+### 5. Product soft delete (archive)
+
+Added `Product.archived Boolean @default(false)` via migration
+`20260803011616_add_product_archived`. `DELETE /api/products/[id]`
+archives instead of hard-deleting — `OrderItem.productId` and
+`WishlistItem.productId` reference products by id with no FK
+constraint, so a hard delete wouldn't even fail loudly, it would just
+silently orphan history. `PATCH` accepts `{ archived }` to restore.
+`GET /api/products` excludes archived products for unauthenticated
+(public/storefront) requests but includes them for an authenticated
+admin session, so the admin dashboard can offer "Show archived" +
+Archive/Restore actions per product row.
+
+### 6. Product page catalog[0] fallback bug fixed; error/not-found boundaries added
+
+`app/(store)/product/[id]/page.tsx` used to do
+`catalog.find(x => x.id === id) || catalog[0]` — a bad/loading/unknown
+id silently rendered a random product instead of a not-found state.
+Fixed: distinguishes catalog-still-loading (shows a loading state),
+catalog-fetch-failed (shows retry, via new `catalogError`/
+`catalogLoading`/`reloadCatalog` on `lib/store.tsx`), and
+genuinely-not-found (calls `notFound()`). Verified live by deliberately
+reverting the fix temporarily and confirming the new Playwright test
+caught the regression, then restoring it.
+
+Added `error.tsx`/`not-found.tsx`/`global-error.tsx` app-wide — none
+existed anywhere before. `app/(store)/not-found.tsx` and
+`app/(store)/error.tsx` match site styling/chrome (used when
+`notFound()`/an error is thrown inside the `(store)` route group).
+`app/not-found.tsx`, `app/error.tsx`, and `app/global-error.tsx` are
+deliberately dependency-free root-level fallbacks (no `useStore()` etc)
+for routes outside that group or failures in the root layout itself —
+an error boundary that depends on the thing that might be broken is a
+liability.
+
+### 7. PayMarks removed from cart/footer (still payment test-mode-only)
+
+Visa/Mastercard/Amex/PayPal/Apple/Google Pay logos rendered on the cart
+page and footer implied real payment processing that doesn't exist yet.
+Removed both usages of `<PayMarks />`; kept `components/PayMarks.tsx`
+itself (now unused, documented why) for a one-line re-add once a real
+payment processor is connected.
+
+### 8. Shop page pagination added
+
+`/api/products` returned the full catalog (all ~150 products + ~2000
+variant rows) on every load — used by `lib/store.tsx`'s app-wide
+catalog fetch (needed by the homepage, cart line lookups, product-detail
+related-items, and the admin dashboard) and by the shop/browse page's
+client-side filter/sort. Rearchitecting the app-wide fetch itself was
+judged too risky for this pass (core browsing was already-solid, and
+homepage/cart/product-detail/admin all lean on it) — instead,
+`/api/products` gained *optional* `page`/`pageSize`/`cat`/`tags`/`q`/
+`sort` query params: calls without them get the exact unchanged legacy
+bare-array response (everything else keeps working as-is), calls with
+them get a paginated `{products, total, page, totalPages}` envelope.
+The shop page — the actual "browse the catalog" page, and the one place
+a user pages through it — now calls this directly instead of
+client-filtering the whole eagerly-loaded catalog, with real Prev/Next
+controls. **Known scope limit**: the app-wide eager catalog fetch used
+by everything else still pulls the full catalog once per session; only
+the shop page's own request is paginated. Flagged here rather than
+silently narrowed — a future pass could split "product summary" (grid
+cards) from "full detail incl. variants" if the catalog grows much
+larger than ~150 items.
+
+Also fixed, found via this work: hard-navigating straight to
+`/checkout` raced the cart's localStorage hydration against the
+"redirect to /cart if empty" effect, occasionally bouncing a user with
+real cart items back to `/cart`. Fixed via a new `cartHydrated` flag on
+`lib/store.tsx`.
+
+### 9. Six polish items
+
+- **Enter-key form submission**: converted styled-div+onClick pseudo-
+  forms to real `<form onSubmit>` for customer login/signup/forgot-
+  password/reset-password, admin login, and checkout (address fields +
+  place order). The discount code field inside the checkout form gets
+  its own Enter behavior (applies the code, doesn't submit the order)
+  via `onKeyDown`, since HTML doesn't allow nested `<form>` elements.
+- **Silent-failure UI**: account dashboard tab fetches and the
+  homepage's catalog fetch now show a real error + retry instead of an
+  indistinguishable empty state.
+- **Wishlist button** added to the product detail page (previously grid
+  cards only).
+- **Env vars validated at boot**: `scripts/check-env.mjs`, wired into
+  `npm run dev`/`npm start`, fails fast with a clear message if
+  `DATABASE_URL`/`AUTH_SECRET` are missing, before the server starts.
+  (Next's `instrumentation.ts` `register()` hook was tried first —
+  confirmed by testing that on the pinned Next 14.2.35 a thrown error
+  there is silently swallowed and the server still reports "Ready", so
+  it doesn't actually fail fast. The pre-start script does, and was
+  verified both locally and inside the Docker image — see item 10.)
+- **Health-check endpoint**: `GET /api/health`, checks real DB
+  connectivity (`SELECT 1`), 503 if unreachable, `force-dynamic` so it's
+  never statically cached. Wired into the Dockerfile's `HEALTHCHECK`.
+- **Admin/customer JWT symmetry**: admin session JWTs now carry
+  `kind: "admin"`, matching the customer JWT's `kind: "customer"`
+  (forward-compatible — tokens signed before this claim existed are
+  still accepted).
+
+### 10. Deployment scaffolding: Dockerfile, security headers, env template
+
+- **Security headers** (`next.config.mjs`): CSP, HSTS, X-Frame-Options,
+  X-Content-Type-Options, Referrer-Policy, Permissions-Policy — none
+  existed before. The CSP needs `'unsafe-inline'` for both script-src
+  (Next's inline hydration payload) and style-src (this codebase renders
+  all styling via React `style={...}` props through a custom CSS-string
+  helper, `lib/style.ts`'s `s()` — CSP's style-src also governs the
+  `style` HTML attribute, not just `<style>` blocks, so this would need
+  a real styling-approach change to tighten further). `script-src` also
+  gets `'unsafe-eval'` in development only — `next dev`'s webpack HMR
+  runtime needs it, confirmed by testing that omitting it breaks client-
+  side hydration entirely in dev (every page got stuck on "Loading…").
+  Production builds don't get `'unsafe-eval'`. Verified with Playwright
+  (no CSP violations across key pages) and by actually running the
+  built Docker image.
+- **Dockerfile**: multi-stage build (`deps` → `builder` → `runner`),
+  Debian `bookworm-slim` base (not Alpine — sidesteps Prisma's
+  historical glibc/musl friction), `next.config.mjs`'s new
+  `output: "standalone"` so the runner image doesn't need the full
+  `node_modules` tree, non-root user, `HEALTHCHECK` hitting
+  `/api/health`. Migrations are deliberately NOT run automatically on
+  container start (avoids multiple replicas/restarts racing to migrate
+  at once) — the Dockerfile documents running them via
+  `docker build --target builder` instead, which has the full `prisma`
+  CLI toolchain the slim runner image doesn't.
+  **Actually built and ran this image** against the real local dev
+  Postgres (`--network host`, pointed at the same `graybridge-pg`
+  container from the SQLite→Postgres migration) to verify end-to-end:
+  homepage 200, `/api/health` reports real DB connectivity, `/api/products`
+  returns all 150 real products, admin login works, Docker's own
+  `HEALTHCHECK` reports "healthy", and running the image with no env
+  vars set fails fast with the expected clear error instead of starting
+  broken.
+  One non-obvious build-time finding: `lib/prisma.ts` constructs its
+  Postgres adapter at module load time, and `next build`'s page-data
+  collection step imports every route module (including ones that
+  import `lib/prisma.ts`) — so `DATABASE_URL` must be *present*
+  (syntactically, doesn't need to be reachable — `pg`'s `Pool` connects
+  lazily on first query) at build time or the build itself fails. The
+  Dockerfile sets a placeholder for this build stage only; the real
+  value comes from `docker run -e DATABASE_URL=...` at runtime.
+- **`.env.production.template`**: documents required
+  (`DATABASE_URL`, `AUTH_SECRET`) vs optional (`ADMIN_USERNAME`/
+  `ADMIN_PASSWORD` seed bootstrap, `RESEND_API_KEY`/`MAIL_FROM`) vars.
+  Not filled in with real values (gitignored like the other `.env*`
+  files) — a template only.
+
+**Held, not implemented this session** (per the original plan, still
+true): the Next.js 14.2.35 → 16.2.12 CVE fix (sequenced after real test
+coverage existed as a safety net — that's now in place; this could be
+attempted in a future session with the test suite as a regression
+check), real Privacy/Terms/Shipping/Returns legal text, and
+VPS-specific choices (process manager, reverse proxy/TLS, real CI/CD)
+beyond this generic Dockerfile/headers/env-template scaffolding.

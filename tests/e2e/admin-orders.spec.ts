@@ -100,9 +100,27 @@ test("tracking carrier/number can be saved and persists across reload", async ({
   await carrierInput.fill("UPS");
   await trackingInput.fill("1Z999AA10123456784");
   await trackingInput.blur();
-  // Carrier/Tracking # save is debounced (500ms) into a single combined
-  // PATCH — wait comfortably past that before reloading.
-  await page.waitForTimeout(900);
+
+  // Carrier/Tracking # save is debounced — rather than assert on the
+  // save-confirmation toast (transient UI; Playwright's fill() on two
+  // separate inputs can easily be >500ms apart in wall-clock time, which
+  // can trigger two separate debounced saves instead of one and makes
+  // "is the toast visible right now" a flaky thing to assert on even
+  // though the underlying save is correct either way — the sequence
+  // guard in commitOrderTracking ensures the final persisted state is
+  // still right), poll the API directly for the persisted values. This
+  // is what actually matters; the UI reload+check below is the final
+  // real-world verification.
+  await expect
+    .poll(
+      async () => {
+        const res = await page.request.get(`/api/orders?q=${encodeURIComponent(ORDER_A_EMAIL)}`);
+        const data = await res.json();
+        return data.orders?.[0];
+      },
+      { timeout: 5_000 },
+    )
+    .toMatchObject({ carrier: "UPS", trackingNumber: "1Z999AA10123456784" });
 
   await page.reload();
   await page.getByText("Orders", { exact: true }).click();

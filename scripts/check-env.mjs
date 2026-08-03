@@ -2,12 +2,21 @@
 // This runs as its own plain `node` process, separate from Next.js, so
 // it does NOT get Next's built-in .env loading for free — replicate just
 // enough of it here (.env, then .env.local overriding) so local dev
-// (secrets in .env) is checked accurately. In production the real
+// (secrets in .env) is checked accurately. In production/Docker the real
 // values are normally provided directly via the process environment
-// (Docker/systemd/etc), where these are no-ops if the files don't exist.
-import { config } from "dotenv";
-config();
-config({ path: ".env.local", override: true });
+// (Docker/systemd/etc) with no .env file present at all — the `dotenv`
+// package itself is a devDependency-adjacent transitive dep and isn't
+// guaranteed to exist in a production install (e.g. the Docker image's
+// pruned/standalone output), so loading it is best-effort and silently
+// skipped if unavailable, rather than crashing this check before it even
+// runs.
+try {
+  const { config } = await import("dotenv");
+  config();
+  config({ path: ".env.local", override: true });
+} catch {
+  /* dotenv not installed — fine, assume real env vars are already set */
+}
 
 // Fails fast, before the Next.js server starts, if required env vars are
 // missing — instead of the previous behavior where AUTH_SECRET/
