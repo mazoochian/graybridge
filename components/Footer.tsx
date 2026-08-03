@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { s } from "@/lib/style";
-import { PayMarks } from "./PayMarks";
 
 export function Footer() {
   const router = useRouter();
@@ -19,9 +18,12 @@ export function Footer() {
             <p style={s("font-size:13.5px;line-height:1.6;color:#9a948a;margin:0")}>
               Honest, durable everyday clothing — designed and finished in Pittsburgh, Pennsylvania.
             </p>
-            <div style={s("display:flex;gap:7px;margin-top:4px;flex-wrap:wrap")}>
-              <PayMarks />
-            </div>
+            {/* Payment brand marks (Visa/Mastercard/Amex/PayPal/Apple/Google
+                Pay) were removed here — the store is still in payment
+                test-mode (lib/payment.ts always "succeeds", no real
+                processor wired up) and showing those logos implied
+                real payment support that doesn't exist yet. Re-add once a
+                real processor is connected. */}
           </div>
           <div style={s("display:flex;gap:60px;flex-wrap:wrap;font-size:13.5px;line-height:2.1")}>
             <div>

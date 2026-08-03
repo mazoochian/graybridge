@@ -5,7 +5,6 @@ import { cartLines, cartTotals } from "@/lib/cart-utils";
 import { useStore } from "@/lib/store";
 import { s } from "@/lib/style";
 import { Hv } from "@/components/Hover";
-import { PayMarks } from "@/components/PayMarks";
 
 export default function CartPage() {
   const router = useRouter();
@@ -118,9 +117,8 @@ export default function CartPage() {
               Checkout · {totals.totalStr}
             </Hv>
             <div style={s("font-size:11.5px;color:#9a948a;text-align:center;margin-top:12px")}>{totals.freeShipNote}</div>
-            <div style={s("display:flex;gap:7px;justify-content:center;margin-top:16px;flex-wrap:wrap")}>
-              <PayMarks />
-            </div>
+            {/* Payment brand marks removed here — still test-mode-only,
+                see components/Footer.tsx for the full explanation. */}
           </div>
         </div>
       )}

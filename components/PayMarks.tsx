@@ -1,5 +1,11 @@
 import { s } from "@/lib/style";
 
+// Currently unused on purpose: Graybridge is still in payment test-mode
+// (lib/payment.ts always "succeeds" — no Stripe/other processor is wired
+// up), and rendering these brand marks on the cart page / footer implied
+// real payment support that doesn't exist yet, which is a misleading
+// trust signal. Re-wire <PayMarks /> back in once a real processor is
+// connected.
 const SVGS: Record<string, string> = {
   visa:
     '<svg width="30" height="12" viewBox="0 0 30 12"><text x="0" y="11" font-family="Geist,sans-serif" font-size="12" font-style="italic" font-weight="700" fill="#1a3a8f">VISA</text></svg>',
