@@ -14,7 +14,8 @@ export default function ForgotPasswordPage() {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
 
-  const submit = async () => {
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setBusy(true);
     try {
       await fetch("/api/account/forgot-password", {
@@ -37,23 +38,24 @@ export default function ForgotPasswordPage() {
             If that email is registered, a reset link is on its way. Check your inbox in a minute.
           </p>
         ) : (
-          <>
+          <form onSubmit={submit} style={s("display:flex;flex-direction:column;gap:16px")}>
             <p style={s("font-size:13.5px;color:#5f5a52;line-height:1.5;margin:0")}>
               Enter your email and we&apos;ll send you a link to reset your password.
             </p>
             <div style={s("display:flex;flex-direction:column;gap:6px")}>
               <label style={s(LABEL_STYLE)}>Email</label>
-              <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" style={s(FIELD_STYLE)} />
+              <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required autoComplete="email" style={s(FIELD_STYLE)} />
             </div>
             <Hv
               as="button"
-              onClick={submit}
+              type="submit"
+              disabled={busy}
               css="background:#c2410c;color:#fff;border:none;padding:13px;border-radius:9px;font-size:14.5px;font-weight:500;cursor:pointer;transition:background .25s"
               hover="background:#9a330a"
             >
               {busy ? "Sending…" : "Send reset link"}
             </Hv>
-          </>
+          </form>
         )}
         <span onClick={() => router.push("/account/login")} style={s("font-size:12.5px;color:#9a948a;text-align:center;cursor:pointer")}>
           ← Back to sign in

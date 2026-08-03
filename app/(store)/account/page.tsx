@@ -61,6 +61,8 @@ export default function AccountPage() {
   const [addresses, setAddresses] = useState<AddressRow[]>([]);
   const [wishlist, setWishlist] = useState<WishlistRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const [newAddress, setNewAddress] = useState(blankAddress());
   const [addingAddress, setAddingAddress] = useState(false);
 
@@ -70,17 +72,28 @@ export default function AccountPage() {
 
   useEffect(() => {
     if (!customer) return;
+    const controller = new AbortController();
     setLoading(true);
+    setLoadError(false);
     const path = tab === "orders" ? "/api/account/orders" : tab === "addresses" ? "/api/account/addresses" : "/api/account/wishlist";
-    fetch(path)
-      .then((r) => r.json())
+    fetch(path, { signal: controller.signal })
+      .then((r) => {
+        if (!r.ok) throw new Error(`${path} failed: ${r.status}`);
+        return r.json();
+      })
       .then((d) => {
         if (tab === "orders") setOrders(d?.orders ?? []);
         else if (tab === "addresses") setAddresses(Array.isArray(d) ? d : []);
         else setWishlist(d?.items ?? []);
       })
-      .finally(() => setLoading(false));
-  }, [tab, customer]);
+      .catch((e) => {
+        if (e?.name !== "AbortError") setLoadError(true);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [tab, customer, retryCount]);
 
   const signOut = async () => {
     await fetch("/api/account/logout", { method: "POST" });
@@ -157,7 +170,19 @@ export default function AccountPage() {
 
       {loading ? <div style={s("color:#8a8275;font-size:13.5px")}>Loading…</div> : null}
 
-      {!loading && tab === "orders" ? (
+      {!loading && loadError ? (
+        <div style={s(`${CARD_STYLE};display:flex;flex-direction:column;align-items:flex-start;gap:12px`)}>
+          <div style={s("color:#b3402a;font-size:13.5px")}>Couldn&apos;t load this — check your connection and try again.</div>
+          <button
+            onClick={() => setRetryCount((n) => n + 1)}
+            style={s("background:#1a1714;color:#fff;border:none;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer")}
+          >
+            Retry
+          </button>
+        </div>
+      ) : null}
+
+      {!loading && !loadError && tab === "orders" ? (
         <div style={s("display:flex;flex-direction:column;gap:12px")}>
           {orders.length === 0 ? (
             <div style={s("color:#8a8275;font-size:13.5px")}>No orders yet.</div>
@@ -180,7 +205,7 @@ export default function AccountPage() {
         </div>
       ) : null}
 
-      {!loading && tab === "addresses" ? (
+      {!loading && !loadError && tab === "addresses" ? (
         <div style={s("display:flex;flex-direction:column;gap:16px")}>
           {addresses.map((a) => (
             <div key={a.id} style={s(`${CARD_STYLE};display:flex;justify-content:space-between;align-items:flex-start`)}>
@@ -235,7 +260,7 @@ export default function AccountPage() {
         </div>
       ) : null}
 
-      {!loading && tab === "wishlist" ? (
+      {!loading && !loadError && tab === "wishlist" ? (
         <div style={s("display:grid;grid-template-columns:repeat(4,1fr);gap:18px")}>
           {wishlist.length === 0 ? (
             <div style={s("color:#8a8275;font-size:13.5px;grid-column:1/-1")}>No saved items yet.</div>

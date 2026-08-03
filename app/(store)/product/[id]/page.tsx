@@ -11,7 +11,7 @@ import { ProductCard } from "@/components/ProductCard";
 export default function ProductPage() {
   const router = useRouter();
   const routeParams = useParams();
-  const { catalog, catalogLoading, catalogError, reloadCatalog, addToCart } = useStore();
+  const { catalog, catalogLoading, catalogError, reloadCatalog, addToCart, wishlist, toggleWishlist } = useStore();
 
   const rawId = Array.isArray(routeParams.id) ? routeParams.id[0] : routeParams.id;
   const id = Number(rawId);
@@ -204,6 +204,24 @@ export default function ProductPage() {
               hover={variantStock === 0 ? "" : "background:#9a330a;transform:translateY(-1px)"}
             >
               {variantStock === 0 ? "Out of stock" : `Add to bag · $${p.price}`}
+            </Hv>
+            <Hv
+              as="button"
+              onClick={() => toggleWishlist(p.id)}
+              title={wishlist.includes(p.id) ? "Remove from wishlist" : "Add to wishlist"}
+              css="width:52px;height:52px;flex-shrink:0;border-radius:10px;border:1px solid #e0d9cc;background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .2s"
+              hover="transform:scale(1.06)"
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill={wishlist.includes(p.id) ? "#c2410c" : "none"}
+                stroke={wishlist.includes(p.id) ? "#c2410c" : "#1a1714"}
+                strokeWidth="1.8"
+              >
+                <path d="M12 21s-7.5-4.7-10-9.1C.5 8.4 2.3 5 5.7 5c2 0 3.4 1 5 3 1.6-2 3-3 5-3 3.4 0 5.2 3.4 3.7 6.9C19.5 16.3 12 21 12 21z" />
+              </svg>
             </Hv>
           </div>
 

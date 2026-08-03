@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 
 export const SESSION_COOKIE = "gb_session";
 const SESSION_TTL = "7d";
+const KIND = "admin";
 
 function secretKey(): Uint8Array {
   const secret = process.env.AUTH_SECRET;
@@ -16,7 +17,7 @@ export interface SessionPayload {
 }
 
 export async function signSession(payload: SessionPayload): Promise<string> {
-  return new SignJWT({ ...payload })
+  return new SignJWT({ ...payload, kind: KIND })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(SESSION_TTL)
@@ -26,6 +27,11 @@ export async function signSession(payload: SessionPayload): Promise<string> {
 export async function verifySession(token: string): Promise<SessionPayload | null> {
   try {
     const { payload } = await jwtVerify(token, secretKey());
+    // Tokens signed before this `kind` claim existed have no `kind` at
+    // all — treat those as valid too (forward-compatible check) so this
+    // doesn't invalidate already-issued sessions. Anything with an
+    // explicit, wrong kind (e.g. a customer token) is rejected.
+    if (payload.kind !== undefined && payload.kind !== KIND) return null;
     if (typeof payload.username !== "string") return null;
     return { username: payload.username };
   } catch {

@@ -17,7 +17,8 @@ export default function AccountLoginPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const submit = async () => {
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setBusy(true);
     setError("");
     try {
@@ -42,22 +43,33 @@ export default function AccountLoginPage() {
 
   return (
     <main style={s("flex:1;display:flex;align-items:center;justify-content:center;padding:60px 24px")}>
-      <div style={s("width:380px;background:#fff;border:1px solid #e7e0d3;border-radius:18px;padding:32px;display:flex;flex-direction:column;gap:16px;animation:gbScale .5s both")}>
+      <form
+        onSubmit={submit}
+        style={s("width:380px;background:#fff;border:1px solid #e7e0d3;border-radius:18px;padding:32px;display:flex;flex-direction:column;gap:16px;animation:gbScale .5s both")}
+      >
         <h1 style={s("font-size:22px;font-weight:600;letter-spacing:-.02em;margin:0")}>Sign in</h1>
         <div style={s("display:flex;flex-direction:column;gap:6px")}>
           <label style={s(LABEL_STYLE)}>Email</label>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" style={s(FIELD_STYLE)} />
+          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required autoComplete="email" style={s(FIELD_STYLE)} />
         </div>
         <div style={s("display:flex;flex-direction:column;gap:6px")}>
           <label style={s(LABEL_STYLE)}>Password</label>
-          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" style={s(FIELD_STYLE)} />
+          <input
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            type="password"
+            required
+            autoComplete="current-password"
+            style={s(FIELD_STYLE)}
+          />
         </div>
         {error ? (
           <div style={s("font-size:12.5px;color:#b3402a;background:#f7e6e1;padding:9px 12px;border-radius:8px")}>{error}</div>
         ) : null}
         <Hv
           as="button"
-          onClick={submit}
+          type="submit"
+          disabled={busy}
           css="background:#c2410c;color:#fff;border:none;padding:13px;border-radius:9px;font-size:14.5px;font-weight:500;cursor:pointer;transition:background .25s"
           hover="background:#9a330a"
         >
@@ -71,7 +83,7 @@ export default function AccountLoginPage() {
             Create account
           </span>
         </div>
-      </div>
+      </form>
     </main>
   );
 }

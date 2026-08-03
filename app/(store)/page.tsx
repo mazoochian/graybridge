@@ -18,7 +18,7 @@ const TILE_DEFS: [string, string][] = [
 
 export default function HomePage() {
   const router = useRouter();
-  const { catalog } = useStore();
+  const { catalog, catalogError, catalogLoading, reloadCatalog } = useStore();
   const catCount = (c: string) => catalog.filter((p) => p.cat === c).length;
 
   let newArrivals = catalog.filter((p) => p.tags.includes("New")).slice(0, 8);
@@ -147,11 +147,27 @@ export default function HomePage() {
             View all →
           </span>
         </div>
-        <div style={s("display:grid;grid-template-columns:repeat(4,1fr);gap:22px")}>
-          {newArrivals.map((p, i) => (
-            <ProductCard key={p.id} p={p} i={i} showAdd showBadge showCat />
-          ))}
-        </div>
+        {catalogError && !catalogLoading ? (
+          <div
+            style={s(
+              "display:flex;align-items:center;justify-content:space-between;gap:14px;background:#f7e6e1;border:1px solid #e6c3b8;border-radius:12px;padding:14px 18px;color:#8a3a25;font-size:13.5px",
+            )}
+          >
+            <span>Couldn&apos;t load products. Check your connection and try again.</span>
+            <button
+              onClick={reloadCatalog}
+              style={s("background:#1a1714;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap")}
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
+          <div style={s("display:grid;grid-template-columns:repeat(4,1fr);gap:22px")}>
+            {newArrivals.map((p, i) => (
+              <ProductCard key={p.id} p={p} i={i} showAdd showBadge showCat />
+            ))}
+          </div>
+        )}
       </section>
 
       {/* standard banner */}

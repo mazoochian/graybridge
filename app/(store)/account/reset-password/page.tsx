@@ -18,7 +18,8 @@ function ResetInner() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const submit = async () => {
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setBusy(true);
     setError("");
     try {
@@ -50,23 +51,32 @@ function ResetInner() {
             Missing reset token. Use the link from your email.
           </div>
         ) : (
-          <>
+          <form onSubmit={submit} style={s("display:flex;flex-direction:column;gap:16px")}>
             <div style={s("display:flex;flex-direction:column;gap:6px")}>
               <label style={s(LABEL_STYLE)}>New password</label>
-              <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" style={s(FIELD_STYLE)} />
+              <input
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                type="password"
+                required
+                minLength={8}
+                autoComplete="new-password"
+                style={s(FIELD_STYLE)}
+              />
             </div>
             {error ? (
               <div style={s("font-size:12.5px;color:#b3402a;background:#f7e6e1;padding:9px 12px;border-radius:8px")}>{error}</div>
             ) : null}
             <Hv
               as="button"
-              onClick={submit}
+              type="submit"
+              disabled={busy}
               css="background:#c2410c;color:#fff;border:none;padding:13px;border-radius:9px;font-size:14.5px;font-weight:500;cursor:pointer;transition:background .25s"
               hover="background:#9a330a"
             >
               {busy ? "Saving…" : "Save new password"}
             </Hv>
-          </>
+          </form>
         )}
       </div>
     </main>

@@ -382,7 +382,8 @@ export default function AdminPage() {
     }
   };
 
-  const doLogin = async () => {
+  const doLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLoginBusy(true);
     setLoginErr("");
     try {
@@ -535,7 +536,10 @@ export default function AdminPage() {
   if (!authed) {
     return (
       <div style={s("flex:1;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#1a1714;padding:24px")}>
-        <div style={s("width:380px;background:#faf8f4;border-radius:18px;padding:36px;display:flex;flex-direction:column;gap:18px;animation:gbScale .5s both")}>
+        <form
+          onSubmit={doLogin}
+          style={s("width:380px;background:#faf8f4;border-radius:18px;padding:36px;display:flex;flex-direction:column;gap:18px;animation:gbScale .5s both")}
+        >
           <div style={s("font-size:23px;font-weight:600;letter-spacing:-.02em")}>
             graybridge<span style={s("color:#c2410c")}>.</span>{" "}
             <span style={s("font:400 12px 'Geist Mono',monospace;color:#9a948a")}>admin</span>
@@ -548,6 +552,8 @@ export default function AdminPage() {
             <input
               value={loginUser}
               onChange={(e) => setLoginUser(e.target.value)}
+              required
+              autoComplete="username"
               style={s("border:1px solid #e0d9cc;background:#fff;border-radius:9px;padding:11px 13px;font-size:14px")}
             />
           </div>
@@ -557,6 +563,8 @@ export default function AdminPage() {
               value={loginPass}
               onChange={(e) => setLoginPass(e.target.value)}
               type="password"
+              required
+              autoComplete="current-password"
               style={s("border:1px solid #e0d9cc;background:#fff;border-radius:9px;padding:11px 13px;font-size:14px")}
             />
           </div>
@@ -567,7 +575,8 @@ export default function AdminPage() {
           ) : null}
           <Hv
             as="button"
-            onClick={doLogin}
+            type="submit"
+            disabled={loginBusy}
             css="background:#c2410c;color:#fff;border:none;padding:13px;border-radius:9px;font-size:14.5px;font-weight:500;cursor:pointer;transition:background .25s;opacity:1"
             hover="background:#9a330a"
           >
@@ -576,7 +585,7 @@ export default function AdminPage() {
           <span onClick={() => router.push("/")} style={s("font-size:12.5px;color:#9a948a;text-align:center;cursor:pointer")}>
             ← Back to store
           </span>
-        </div>
+        </form>
       </div>
     );
   }

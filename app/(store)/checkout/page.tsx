@@ -36,7 +36,7 @@ const LABEL_STYLE = "font-size:12.5px;font-weight:500;color:#5f5a52";
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { cart, catalog, clearCart } = useStore();
+  const { cart, cartHydrated, catalog, clearCart } = useStore();
   const [form, setForm] = useState<FormState>(blankForm());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -49,7 +49,8 @@ export default function CheckoutPage() {
   const baseTotals = cartTotals(cart, catalog);
   const totals = appliedDiscount ? applyDiscount(baseTotals, appliedDiscount.amount) : baseTotals;
 
-  const applyDiscountCode = async () => {
+  const applyDiscountCode = async (e?: React.SyntheticEvent) => {
+    e?.preventDefault();
     if (!discountInput.trim()) return;
     setDiscountChecking(true);
     setDiscountError("");
@@ -78,8 +79,12 @@ export default function CheckoutPage() {
   };
 
   useEffect(() => {
-    if (cart.length === 0) router.replace("/cart");
-  }, [cart.length, router]);
+    // Wait for the cart to finish hydrating from localStorage before
+    // trusting an empty cart — otherwise a hard refresh/direct load of
+    // /checkout sees the initial empty [] for one tick and bounces to
+    // /cart even when the cart actually has items.
+    if (cartHydrated && cart.length === 0) router.replace("/cart");
+  }, [cartHydrated, cart.length, router]);
 
   const field = (key: keyof FormState) => ({
     value: form[key],
@@ -87,7 +92,8 @@ export default function CheckoutPage() {
     style: s(FIELD_STYLE),
   });
 
-  const submit = async () => {
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setError("");
     setBusy(true);
     try {
@@ -129,18 +135,18 @@ export default function CheckoutPage() {
       <h1 style={s("font-size:34px;font-weight:600;letter-spacing:-.025em;margin:0 0 28px;animation:gbFade .4s both")}>
         Checkout
       </h1>
-      <div style={s("display:grid;grid-template-columns:1fr 340px;gap:40px;align-items:start")}>
+      <form onSubmit={submit} style={s("display:grid;grid-template-columns:1fr 340px;gap:40px;align-items:start")}>
         <div style={s("display:flex;flex-direction:column;gap:16px;animation:gbFade .5s both")}>
           <div style={s("background:#fff;border:1px solid #e7e0d3;border-radius:14px;padding:24px;display:flex;flex-direction:column;gap:16px")}>
             <div style={s("font-size:15px;font-weight:600")}>Contact</div>
             <div style={s("display:grid;grid-template-columns:1fr 1fr;gap:14px")}>
               <div style={s("display:flex;flex-direction:column;gap:6px")}>
                 <label style={s(LABEL_STYLE)}>Full name</label>
-                <input {...field("name")} placeholder="Jamie Rivera" />
+                <input {...field("name")} placeholder="Jamie Rivera" required autoComplete="name" />
               </div>
               <div style={s("display:flex;flex-direction:column;gap:6px")}>
                 <label style={s(LABEL_STYLE)}>Email</label>
-                <input {...field("email")} placeholder="you@example.com" type="email" />
+                <input {...field("email")} placeholder="you@example.com" type="email" required autoComplete="email" />
               </div>
             </div>
           </div>
@@ -149,34 +155,34 @@ export default function CheckoutPage() {
             <div style={s("font-size:15px;font-weight:600")}>Shipping address</div>
             <div style={s("display:flex;flex-direction:column;gap:6px")}>
               <label style={s(LABEL_STYLE)}>Address line 1</label>
-              <input {...field("line1")} placeholder="123 Main St" />
+              <input {...field("line1")} placeholder="123 Main St" required autoComplete="address-line1" />
             </div>
             <div style={s("display:flex;flex-direction:column;gap:6px")}>
               <label style={s(LABEL_STYLE)}>Address line 2 (optional)</label>
-              <input {...field("line2")} placeholder="Apt, suite, etc." />
+              <input {...field("line2")} placeholder="Apt, suite, etc." autoComplete="address-line2" />
             </div>
             <div style={s("display:grid;grid-template-columns:1fr 1fr;gap:14px")}>
               <div style={s("display:flex;flex-direction:column;gap:6px")}>
                 <label style={s(LABEL_STYLE)}>City</label>
-                <input {...field("city")} placeholder="Pittsburgh" />
+                <input {...field("city")} placeholder="Pittsburgh" required autoComplete="address-level2" />
               </div>
               <div style={s("display:flex;flex-direction:column;gap:6px")}>
                 <label style={s(LABEL_STYLE)}>State / region</label>
-                <input {...field("region")} placeholder="PA" />
+                <input {...field("region")} placeholder="PA" required autoComplete="address-level1" />
               </div>
             </div>
             <div style={s("display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px")}>
               <div style={s("display:flex;flex-direction:column;gap:6px")}>
                 <label style={s(LABEL_STYLE)}>Postal code</label>
-                <input {...field("postalCode")} placeholder="15222" />
+                <input {...field("postalCode")} placeholder="15222" required autoComplete="postal-code" />
               </div>
               <div style={s("display:flex;flex-direction:column;gap:6px")}>
                 <label style={s(LABEL_STYLE)}>Country</label>
-                <input {...field("country")} />
+                <input {...field("country")} required autoComplete="country-name" />
               </div>
               <div style={s("display:flex;flex-direction:column;gap:6px")}>
                 <label style={s(LABEL_STYLE)}>Phone (optional)</label>
-                <input {...field("phone")} placeholder="" />
+                <input {...field("phone")} placeholder="" autoComplete="tel" />
               </div>
             </div>
           </div>
@@ -216,11 +222,20 @@ export default function CheckoutPage() {
                 <input
                   value={discountInput}
                   onChange={(e) => setDiscountInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    // This input lives inside the order <form> — Enter
+                    // here should apply the code, not submit the order.
+                    // (HTML doesn't allow nested <form> elements, so
+                    // intercepting the keydown is the way to give it its
+                    // own Enter behavior.)
+                    if (e.key === "Enter") applyDiscountCode(e);
+                  }}
                   placeholder="Discount code"
                   style={s("flex:1;border:1px solid #e0d9cc;border-radius:9px;padding:9px 11px;font-size:13px;min-width:0")}
                 />
                 <Hv
                   as="button"
+                  type="button"
                   onClick={applyDiscountCode}
                   css="background:#fff;color:#1a1714;border:1px solid #e0d9cc;padding:9px 16px;border-radius:9px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap"
                   hover="background:#f7f3ea"
@@ -264,14 +279,15 @@ export default function CheckoutPage() {
           </div>
           <Hv
             as="button"
-            onClick={submit}
+            type="submit"
+            disabled={busy}
             css="width:100%;background:#c2410c;color:#fff;border:none;padding:15px;border-radius:10px;font-size:15px;font-weight:500;cursor:pointer;margin-top:18px;transition:background .25s,transform .2s"
             hover="background:#9a330a;transform:translateY(-1px)"
           >
             {busy ? "Placing order…" : `Place order · ${totals.totalStr}`}
           </Hv>
         </div>
-      </div>
+      </form>
     </main>
   );
 }

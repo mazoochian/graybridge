@@ -32,6 +32,7 @@ interface StoreValue {
   catalogError: boolean;
   reloadCatalog: () => void;
   cart: CartItem[];
+  cartHydrated: boolean;
   cartOpen: boolean;
   toast: string;
   cartCount: number;
@@ -62,17 +63,25 @@ export function Providers({ children }: { children: ReactNode }) {
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [cartHydrated, setCartHydrated] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [toast, setToast] = useState("");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Hydrate cart from localStorage after mount (avoids SSR mismatch).
+  // cartHydrated lets consumers (e.g. the checkout page's "redirect to
+  // /cart if empty" check) wait for this to finish before trusting
+  // cart.length — otherwise a hard refresh/direct load of /checkout sees
+  // the initial empty [] for one tick and can redirect away even though
+  // the cart actually has items once localStorage is read.
   useEffect(() => {
     try {
       const c = JSON.parse(localStorage.getItem("gb_cart") || "[]");
       if (Array.isArray(c)) setCart(c);
     } catch {
       /* ignore */
+    } finally {
+      setCartHydrated(true);
     }
   }, []);
 
@@ -209,6 +218,7 @@ export function Providers({ children }: { children: ReactNode }) {
     catalogError,
     reloadCatalog: loadCatalog,
     cart,
+    cartHydrated,
     cartOpen,
     toast,
     cartCount,
