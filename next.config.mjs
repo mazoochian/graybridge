@@ -54,9 +54,9 @@ const nextConfig = {
   images: {
     remotePatterns: [{ protocol: "https", hostname: "images.unsplash.com" }],
   },
-  experimental: {
-    serverComponentsExternalPackages: ["pg", "@prisma/adapter-pg"],
-  },
+  // Renamed from experimental.serverComponentsExternalPackages, which
+  // graduated out of experimental as of Next 15.
+  serverExternalPackages: ["pg", "@prisma/adapter-pg"],
   // Standalone output: bundles just the traced production dependencies
   // into .next/standalone, so the Docker image doesn't need the full
   // node_modules tree copied in. See Dockerfile.

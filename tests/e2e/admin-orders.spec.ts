@@ -1,4 +1,4 @@
-import { test, expect, request as pwRequest } from "@playwright/test";
+import { test, expect, request as pwRequest, type Cookie } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -23,6 +23,15 @@ const ORDER_A_EMAIL = `e2e-alpha-${RUN_ID}@example.com`;
 test.describe.configure({ mode: "serial" });
 
 let createdOrderIds: number[] = [];
+// Captured once after the first (real, UI-driven) login and reused by
+// the other tests in this file via cookie injection — /api/auth/login
+// is intentionally rate-limited (5 attempts/15min per username, see
+// lib/rate-limit.ts), and every test in this file logging in separately
+// through the UI was eating into that same budget fast enough to
+// occasionally 429 a later test during a busy run (e.g. right after a
+// retry). Only the "admin can log in" test below needs to exercise the
+// real login form; the others just need to already be authenticated.
+let savedCookies: Cookie[] | null = null;
 
 test.beforeAll(async ({ baseURL }) => {
   // Place one real order through the checkout API against a real seeded
@@ -58,7 +67,8 @@ test.afterAll(async ({ baseURL }) => {
   await api.dispose();
 });
 
-async function login(page: import("@playwright/test").Page) {
+/** Real UI-driven login — only for the test that's actually testing the login form. */
+async function loginViaUi(page: import("@playwright/test").Page) {
   const { username, password } = readAdminCredentials();
   await page.goto("/admin");
   // The login form's two inputs have no placeholder/id — just adjacent
@@ -69,15 +79,25 @@ async function login(page: import("@playwright/test").Page) {
   await expect(page.getByRole("heading", { name: "Products" })).toBeVisible({ timeout: 10_000 });
 }
 
+/** Reuses the session cookie captured from the first test's real login instead of logging in again. */
+async function restoreAdminSession(page: import("@playwright/test").Page) {
+  if (!savedCookies) throw new Error("No saved admin session — the 'admin can log in' test must run first.");
+  await page.context().addCookies(savedCookies);
+  await page.goto("/admin");
+  await expect(page.getByRole("heading", { name: "Products" })).toBeVisible({ timeout: 10_000 });
+}
+
 test("admin can log in and see the orders table", async ({ page }) => {
-  await login(page);
+  await loginViaUi(page);
+  savedCookies = await page.context().cookies();
+
   await page.getByText("Orders", { exact: true }).click();
   await expect(page.getByRole("heading", { name: "Orders" })).toBeVisible();
   await expect(page.getByText(`#GB-`).first()).toBeVisible({ timeout: 10_000 });
 });
 
 test("order search filters to the matching row", async ({ page }) => {
-  await login(page);
+  await restoreAdminSession(page);
   await page.getByText("Orders", { exact: true }).click();
   await expect(page.getByRole("heading", { name: "Orders" })).toBeVisible();
 
@@ -89,7 +109,7 @@ test("order search filters to the matching row", async ({ page }) => {
 });
 
 test("tracking carrier/number can be saved and persists across reload", async ({ page }) => {
-  await login(page);
+  await restoreAdminSession(page);
   await page.getByText("Orders", { exact: true }).click();
   await page.getByPlaceholder(/search order/i).fill(ORDER_A_EMAIL);
   await expect(page.getByText(ORDER_A_NAME)).toBeVisible({ timeout: 5_000 });
@@ -118,7 +138,12 @@ test("tracking carrier/number can be saved and persists across reload", async ({
         const data = await res.json();
         return data.orders?.[0];
       },
-      { timeout: 5_000 },
+      // Generous timeout: this polls past the 500ms debounce plus a real
+      // network round trip, and has been observed to occasionally need
+      // longer than 5s specifically when run as part of the full suite
+      // (a long-running single `next dev` process serving many
+      // sequential tests) rather than in isolation.
+      { timeout: 10_000 },
     )
     .toMatchObject({ carrier: "UPS", trackingNumber: "1Z999AA10123456784" });
 

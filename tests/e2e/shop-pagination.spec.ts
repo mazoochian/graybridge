@@ -19,14 +19,22 @@ test("the shop page's product request is paginated, not the full catalog", async
 });
 
 test("shop page pagination controls move between pages without duplicating results", async ({ page }) => {
-  await page.goto("/shop");
-  await expect(page.locator("main")).toContainText("items", { timeout: 10_000 });
+  // Decide up front, via the API directly, whether there's more than one
+  // page at the shop page's page size (24) — deterministic, instead of
+  // racing UI load timing to infer it from whether a "Next" button
+  // happens to have rendered yet when we check.
+  const data = await (await page.request.get("/api/products?page=1&pageSize=24")).json();
+  test.skip(data.totalPages <= 1, "catalog has only one page at the current page size");
 
-  const nextButton = page.getByRole("button", { name: /next/i });
-  // Only proceed if there's more than one page (depends on seeded catalog size).
-  if (!(await nextButton.isEnabled().catch(() => false))) {
-    test.skip(true, "catalog has only one page at the current page size");
-  }
+  await page.goto("/shop");
+  await expect(page.getByText(/page 1 of/i)).toBeVisible({ timeout: 10_000 });
+
+  // Scoped to <main> and exact text — Next.js 16's dev-mode floating
+  // "Open Next.js Dev Tools" button also matches a loose /next/i name
+  // filter (it's outside <main>, but a bare getByRole with no scope
+  // still matches it too).
+  const nextButton = page.locator("main").getByRole("button", { name: "Next →", exact: true });
+  await expect(nextButton).toBeEnabled({ timeout: 5_000 });
 
   const firstPageFirstProduct = await page.locator("main >> text=$").first().textContent();
   await nextButton.click();
