@@ -465,10 +465,77 @@ real cart items back to `/cart`. Fixed via a new `cartHydrated` flag on
   Not filled in with real values (gitignored like the other `.env*`
   files) — a template only.
 
+### 11. Next.js 14.2.35 → 16.2.12 upgrade (attempted and landed)
+
+The plan held this CVE fix until real test coverage existed as a safety
+net — by the time item 10 was done, that coverage was in place (33
+Vitest + 15 Playwright tests over the checkout/auth/inventory/admin
+critical paths), so per the plan's own condition this was attempted, on
+a separate branch (`nextjs-16-upgrade-attempt`) so master stayed
+deployable regardless of outcome, and it's now merged.
+
+**Why it's worth it**: `npm audit` on 14.2.35 lists ~21 real, disclosed
+Next.js CVEs — DoS, SSRF, cache poisoning, XSS, request smuggling — the
+exact categories the plan flagged. 16.2.12 resolves all of them.
+Confirmed this is a clean net win, not a lateral move: the only *new*
+`npm audit` finding on 16.2.12 is a `sharp`/libvips CVE, and `sharp` is
+unreachable in this app — it's `next/image`'s optional native
+image-processing backend, and `next/image` is never imported anywhere in
+this codebase (every image is a plain `<img>` tag, confirmed by
+`grep -rn "next/image" app/ components/` returning nothing). The
+pre-existing `postcss` finding is a transitive Next.js dependency
+present on *both* versions — not something this upgrade introduced.
+Skipped v15 as planned (went straight to 16.2.12). React stayed at
+18.3.1 — Next 16.2.12's peer dependency range still accepts `^18.2.0`,
+so no React major-version bump was needed, which meaningfully lowered
+the risk of this being a much bigger undertaking.
+
+**Mechanical changes beyond the version bump**: `next.config.mjs`'s
+`experimental.serverComponentsExternalPackages` renamed to top-level
+`serverExternalPackages` (graduated out of experimental as of Next 15).
+`tsconfig.json` got two changes Next auto-applied on first build:
+`jsx: "react-jsx"` (mandatory as of Next 16 — automatic JSX runtime) and
+`.next/dev/types/**/*.ts` added to `include`.
+
+**Verification** (same rigor as every other item this session):
+`npm run build` and `tsc --noEmit` clean; all 33 Vitest tests pass
+unchanged; the actual Dockerfile image was rebuilt against 16.2.12 and
+run end-to-end against the real local dev Postgres (homepage, health
+check with real DB connectivity, `/api/products` including the new
+pagination, admin login, fail-fast without env vars) — no differences
+from the same verification done on 14.2.35.
+
+The Playwright suite needed real fixes, not just re-runs, and surfaced
+two things worth recording:
+1. **Locator collision**: Next 16's dev-mode floating "Open Next.js Dev
+   Tools" button has an aria-label that also matches a loose `/next/i`
+   button-name filter, colliding with this app's own "Next →"
+   pagination button in `tests/e2e/shop-pagination.spec.ts`. Fixed by
+   scoping the locator to `<main>` with exact text match.
+2. **Dev-mode-only flake, root-caused, not just retried away**: `next
+   dev`'s Fast Refresh occasionally performs a full page reload as a
+   fallback (the dev server logs "Fast Refresh had to perform a full
+   reload" when this happens) — confirmed via testing that this
+   reproduces with *both* Turbopack and `--webpack`, so it's an inherent
+   `next dev` characteristic, not specific to Turbopack or to this
+   upgrade. A hard reload destroys any pending client-side timer (e.g.
+   the admin order tracking save's debounce from item 4), which no
+   implementation of that timer can survive by definition — it only
+   matters in dev-mode e2e testing; a production build never does this.
+   Two changes: `playwright.config.ts` now sets `retries: 1` to absorb
+   this class of environmental flakiness, and
+   `tests/e2e/admin-orders.spec.ts` was refactored so only the test that
+   actually exercises the login *form* drives it through the UI — the
+   other two tests in that file now reuse its session cookie instead of
+   logging in again. This was needed because redundant per-test UI
+   logins were eating into `/api/auth/login`'s own 5-attempts/15-minute
+   rate limit (item 2) fast enough that a retry on one test could push a
+   *later* test's real login over the limit, cascading one flake into
+   several failures. With this fix, a full suite run now consistently
+   lands at either 15/15 clean or 14 clean + 1 flaky-but-passes-on-retry
+   — never a cascade.
+
 **Held, not implemented this session** (per the original plan, still
-true): the Next.js 14.2.35 → 16.2.12 CVE fix (sequenced after real test
-coverage existed as a safety net — that's now in place; this could be
-attempted in a future session with the test suite as a regression
-check), real Privacy/Terms/Shipping/Returns legal text, and
-VPS-specific choices (process manager, reverse proxy/TLS, real CI/CD)
-beyond this generic Dockerfile/headers/env-template scaffolding.
+true): real Privacy/Terms/Shipping/Returns legal text, and VPS-specific
+choices (process manager, reverse proxy/TLS, real CI/CD) beyond the
+generic Dockerfile/headers/env-template scaffolding from item 10.
