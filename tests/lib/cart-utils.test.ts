@@ -20,6 +20,7 @@ function product(overrides: Partial<Product> = {}): Product {
     desc: "",
     variants: [{ size: "M", color: "Black", stock: 10 }],
     _ord: 0,
+    archived: false,
     ...overrides,
   };
 }

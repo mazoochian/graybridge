@@ -90,7 +90,7 @@ interface OrderStats {
 const money = (n: number) => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
-const GRID = "56px 2.2fr 1fr 1fr 1.2fr .9fr 70px";
+const GRID = "56px 2.2fr 1fr 1fr 1.2fr .9fr 120px";
 const ORDER_GRID = "1fr 1.4fr .6fr .8fr 1fr 1.4fr .9fr";
 
 export default function AdminPage() {
@@ -105,6 +105,7 @@ export default function AdminPage() {
   const [loginBusy, setLoginBusy] = useState(false);
   const [view, setView] = useState<AdminView>("products");
   const [adminSearch, setAdminSearch] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState<Form>(blankForm());
   const [variantGrid, setVariantGrid] = useState<VariantCell[]>(() => reconcileVariants(blankForm().colors, []));
@@ -168,19 +169,54 @@ export default function AdminPage() {
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [orderStats, setOrderStats] = useState<OrderStats | null>(null);
   const [ordersLoading, setOrdersLoading] = useState(false);
+  const [orderSearchInput, setOrderSearchInput] = useState("");
+  const [orderQuery, setOrderQuery] = useState("");
+  const [orderStatusFilter, setOrderStatusFilter] = useState("");
+  const [orderPage, setOrderPage] = useState(1);
+  const [orderTotal, setOrderTotal] = useState(0);
+  const [orderTotalPages, setOrderTotalPages] = useState(1);
+  const ORDER_PAGE_SIZE = 25;
+
+  // Debounce the free-text order search so we don't refetch on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setOrderQuery(orderSearchInput.trim()), 350);
+    return () => clearTimeout(t);
+  }, [orderSearchInput]);
+
+  // Any filter change resets back to page 1.
+  useEffect(() => {
+    setOrderPage(1);
+  }, [orderQuery, orderStatusFilter]);
 
   useEffect(() => {
     if (view !== "orders" || !authed) return;
+    // A slower earlier request (e.g. the initial unfiltered page) could
+    // otherwise resolve *after* a faster later one (e.g. a filtered
+    // search) and clobber it with stale results — abort on every
+    // dependency change so only the latest request can ever apply.
+    const controller = new AbortController();
     setOrdersLoading(true);
-    fetch("/api/orders")
+    const params = new URLSearchParams();
+    if (orderQuery) params.set("q", orderQuery);
+    if (orderStatusFilter) params.set("status", orderStatusFilter);
+    params.set("page", String(orderPage));
+    params.set("pageSize", String(ORDER_PAGE_SIZE));
+    fetch(`/api/orders?${params.toString()}`, { signal: controller.signal })
       .then((r) => r.json())
       .then((d) => {
         setOrders(Array.isArray(d?.orders) ? d.orders : []);
         setOrderStats(d?.stats ?? null);
+        setOrderTotal(typeof d?.total === "number" ? d.total : 0);
+        setOrderTotalPages(typeof d?.totalPages === "number" ? d.totalPages : 1);
       })
-      .catch(() => showToast("Could not load orders", 2600))
-      .finally(() => setOrdersLoading(false));
-  }, [view, authed]);
+      .catch((e) => {
+        if (e?.name !== "AbortError") showToast("Could not load orders", 2600);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setOrdersLoading(false);
+      });
+    return () => controller.abort();
+  }, [view, authed, orderQuery, orderStatusFilter, orderPage]);
 
   const updateOrderStatus = async (id: number, status: string) => {
     const prev = orders;
@@ -198,8 +234,11 @@ export default function AdminPage() {
     }
   };
 
+  const setOrderField = (id: number, field: "carrier" | "trackingNumber", value: string) => {
+    setOrders((os) => os.map((o) => (o.id === id ? { ...o, [field]: value } : o)));
+  };
+
   const updateOrderTracking = async (id: number, carrier: string, trackingNumber: string) => {
-    setOrders((os) => os.map((o) => (o.id === id ? { ...o, carrier, trackingNumber } : o)));
     try {
       const res = await fetch(`/api/orders/${id}`, {
         method: "PATCH",
@@ -207,6 +246,7 @@ export default function AdminPage() {
         body: JSON.stringify({ carrier, trackingNumber }),
       });
       if (!res.ok) throw new Error();
+      showToast("Tracking info saved", 1800);
     } catch {
       showToast("Could not save tracking info", 2600);
     }
@@ -430,6 +470,34 @@ export default function AdminPage() {
     }
   };
 
+  const archiveProduct = async (id: number) => {
+    try {
+      const res = await fetch(`/api/products/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      const updated: Product = await res.json();
+      setCatalog((prev) => prev.map((p) => (p.id === id ? updated : p)));
+      showToast("Product archived", 2200);
+    } catch {
+      showToast("Could not archive product", 2600);
+    }
+  };
+
+  const restoreProduct = async (id: number) => {
+    try {
+      const res = await fetch(`/api/products/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archived: false }),
+      });
+      if (!res.ok) throw new Error();
+      const updated: Product = await res.json();
+      setCatalog((prev) => prev.map((p) => (p.id === id ? updated : p)));
+      showToast("Product restored", 2200);
+    } catch {
+      showToast("Could not restore product", 2600);
+    }
+  };
+
   // ---- LOGIN SCREEN ----
   if (checkingAuth) {
     return <div style={s("flex:1;min-height:100vh;background:#1a1714")} />;
@@ -485,6 +553,7 @@ export default function AdminPage() {
 
   // ---- DASHBOARD ----
   let alist = catalog.slice();
+  if (!showArchived) alist = alist.filter((p) => !p.archived);
   if (adminSearch) {
     const q = adminSearch.toLowerCase();
     alist = alist.filter((p) => (p.name + " " + p.cat + " " + p.sku).toLowerCase().includes(q));
@@ -538,10 +607,14 @@ export default function AdminPage() {
               <div>
                 <h1 style={s("font-size:26px;font-weight:600;letter-spacing:-.02em;margin:0")}>Products</h1>
                 <p style={s("font-size:13.5px;color:#8a8275;margin:5px 0 0")}>
-                  Showing {Math.min(alist.length, 50)} of {catalog.length} products
+                  Showing {Math.min(alist.length, 50)} of {catalog.filter((p) => showArchived || !p.archived).length} products
                 </p>
               </div>
-              <div style={s("display:flex;gap:12px")}>
+              <div style={s("display:flex;gap:12px;align-items:center")}>
+                <label style={s("display:flex;align-items:center;gap:7px;font-size:12.5px;color:#6b6459;cursor:pointer;white-space:nowrap")}>
+                  <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+                  Show archived
+                </label>
                 <div style={s("display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #e0d9cc;border-radius:9px;padding:9px 13px;width:230px")}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9a9388" strokeWidth="2">
                     <circle cx="11" cy="11" r="7" />
@@ -613,7 +686,9 @@ export default function AdminPage() {
                   <div
                     key={p.id}
                     style={s(
-                      `display:grid;grid-template-columns:${GRID};gap:14px;padding:11px 20px;border-bottom:1px solid #f2ece1;align-items:center;font-size:13.5px`,
+                      `display:grid;grid-template-columns:${GRID};gap:14px;padding:11px 20px;border-bottom:1px solid #f2ece1;align-items:center;font-size:13.5px;${
+                        p.archived ? "opacity:.55" : ""
+                      }`,
                     )}
                   >
                     <div style={s("width:40px;height:50px;border-radius:7px;overflow:hidden;background:#f1ece2")}>
@@ -621,18 +696,46 @@ export default function AdminPage() {
                       <img src={img(p.imgId, 120)} alt="" style={s("width:100%;height:100%;object-fit:cover")} />
                     </div>
                     <div>
-                      <div style={s("font-weight:500")}>{p.name}</div>
+                      <div style={s("font-weight:500;display:flex;align-items:center;gap:7px")}>
+                        {p.name}
+                        {p.archived ? (
+                          <span style={s("font:500 10px 'Geist Mono',monospace;color:#8a8275;background:#f1ece2;padding:2px 6px;border-radius:5px;text-transform:uppercase")}>
+                            Archived
+                          </span>
+                        ) : null}
+                      </div>
                       <div style={s("font:400 11px 'Geist Mono',monospace;color:#b3ada3")}>{p.sku}</div>
                     </div>
                     <span style={s("color:#5f5a52")}>{p.cat}</span>
                     <span style={s("font:500 13px 'Geist Mono',monospace")}>${p.price}</span>
                     <span style={s("font-size:12px;color:#8a8275")}>{p.tags.slice(0, 2).join(", ") || "—"}</span>
                     <span style={s(`font:500 12px 'Geist Mono',monospace;color:${stockColor}`)}>{stockLabel}</span>
-                    <span
-                      onClick={() => startEdit(p.id)}
-                      style={s("font-size:12.5px;color:#c2410c;cursor:pointer;font-weight:500")}
-                    >
-                      Edit
+                    <span style={s("display:flex;gap:10px")}>
+                      <span
+                        onClick={() => startEdit(p.id)}
+                        style={s("font-size:12.5px;color:#c2410c;cursor:pointer;font-weight:500")}
+                      >
+                        Edit
+                      </span>
+                      {p.archived ? (
+                        <span
+                          onClick={() => restoreProduct(p.id)}
+                          style={s("font-size:12.5px;color:#1f8a5b;cursor:pointer;font-weight:500")}
+                        >
+                          Restore
+                        </span>
+                      ) : (
+                        <span
+                          onClick={() => {
+                            if (confirm(`Archive "${p.name}"? It'll be hidden from the storefront but kept for order history.`)) {
+                              archiveProduct(p.id);
+                            }
+                          }}
+                          style={s("font-size:12.5px;color:#8a8275;cursor:pointer;font-weight:500")}
+                        >
+                          Archive
+                        </span>
+                      )}
                     </span>
                   </div>
                 );
@@ -823,8 +926,38 @@ export default function AdminPage() {
         {/* ORDERS */}
         {view === "orders" ? (
           <div style={s("animation:gbFade .4s both")}>
-            <h1 style={s("font-size:26px;font-weight:600;letter-spacing:-.02em;margin:0 0 4px")}>Orders</h1>
-            <p style={s("font-size:13.5px;color:#8a8275;margin:0 0 22px")}>Last 30 days</p>
+            <div style={s("display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;flex-wrap:wrap;gap:14px")}>
+              <div>
+                <h1 style={s("font-size:26px;font-weight:600;letter-spacing:-.02em;margin:0")}>Orders</h1>
+                <p style={s("font-size:13.5px;color:#8a8275;margin:5px 0 0")}>KPI cards below are last 30 days · table respects search/filter</p>
+              </div>
+              <div style={s("display:flex;gap:12px")}>
+                <div style={s("display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #e0d9cc;border-radius:9px;padding:9px 13px;width:230px")}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9a9388" strokeWidth="2">
+                    <circle cx="11" cy="11" r="7" />
+                    <line x1="21" y1="21" x2="16.5" y2="16.5" />
+                  </svg>
+                  <input
+                    value={orderSearchInput}
+                    onChange={(e) => setOrderSearchInput(e.target.value)}
+                    placeholder="Search order #, name, email"
+                    style={s("border:none;background:transparent;font-size:13.5px;width:100%")}
+                  />
+                </div>
+                <select
+                  value={orderStatusFilter}
+                  onChange={(e) => setOrderStatusFilter(e.target.value)}
+                  style={s("border:1px solid #e0d9cc;border-radius:9px;padding:9px 13px;font-size:13.5px;background:#fff;cursor:pointer")}
+                >
+                  <option value="">All statuses</option>
+                  {ORDER_STATUSES.map((st) => (
+                    <option key={st} value={st}>
+                      {st}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
             <div style={s("display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px")}>
               {[
                 ["Revenue (30d)", orderStats ? money(orderStats.revenue30d) : "—"],
@@ -852,12 +985,15 @@ export default function AdminPage() {
                 <span>Items</span>
                 <span>Total</span>
                 <span>Status</span>
+                <span>Tracking</span>
                 <span>Date</span>
               </div>
               {ordersLoading ? (
                 <div style={s("padding:24px 20px;color:#8a8275;font-size:13.5px")}>Loading orders…</div>
               ) : orders.length === 0 ? (
-                <div style={s("padding:24px 20px;color:#8a8275;font-size:13.5px")}>No orders yet.</div>
+                <div style={s("padding:24px 20px;color:#8a8275;font-size:13.5px")}>
+                  {orderQuery || orderStatusFilter ? "No orders match your search/filter." : "No orders yet."}
+                </div>
               ) : (
                 orders.map((o) => {
                   const clr = STATUS_CLR[o.status] || ["#eee", "#555"];
@@ -869,7 +1005,10 @@ export default function AdminPage() {
                       )}
                     >
                       <span style={s("font:500 12.5px 'Geist Mono',monospace")}>#{o.orderNumber}</span>
-                      <span>{o.name}</span>
+                      <span>
+                        <div>{o.name}</div>
+                        <div style={s("font-size:11px;color:#b3ada3")}>{o.email}</div>
+                      </span>
                       <span style={s("color:#8a8275")}>{o.itemCount} items</span>
                       <span style={s("font:500 13px 'Geist Mono',monospace")}>{money(o.total)}</span>
                       <span>
@@ -887,12 +1026,62 @@ export default function AdminPage() {
                           ))}
                         </select>
                       </span>
+                      <span style={s("display:flex;flex-direction:column;gap:4px")}>
+                        <input
+                          value={o.carrier}
+                          onChange={(e) => setOrderField(o.id, "carrier", e.target.value)}
+                          onBlur={(e) => updateOrderTracking(o.id, e.target.value, o.trackingNumber)}
+                          placeholder="Carrier"
+                          style={s("border:1px solid #e7e0d3;border-radius:6px;padding:4px 7px;font-size:11.5px;width:100%")}
+                        />
+                        <input
+                          value={o.trackingNumber}
+                          onChange={(e) => setOrderField(o.id, "trackingNumber", e.target.value)}
+                          onBlur={(e) => updateOrderTracking(o.id, o.carrier, e.target.value)}
+                          placeholder="Tracking #"
+                          style={s("border:1px solid #e7e0d3;border-radius:6px;padding:4px 7px;font-size:11.5px;width:100%;font-family:'Geist Mono',monospace")}
+                        />
+                      </span>
                       <span style={s("color:#8a8275;font:400 12.5px 'Geist Mono',monospace")}>{shortDate(o.createdAt)}</span>
                     </div>
                   );
                 })
               )}
             </div>
+            {!ordersLoading && orders.length > 0 ? (
+              <div style={s("display:flex;justify-content:space-between;align-items:center;margin-top:16px;font-size:12.5px;color:#8a8275")}>
+                <span>
+                  Showing {(orderPage - 1) * ORDER_PAGE_SIZE + 1}–{Math.min(orderPage * ORDER_PAGE_SIZE, orderTotal)} of {orderTotal}
+                </span>
+                <div style={s("display:flex;gap:8px;align-items:center")}>
+                  <button
+                    onClick={() => setOrderPage((p) => Math.max(1, p - 1))}
+                    disabled={orderPage <= 1}
+                    style={s(
+                      `background:#fff;border:1px solid #e0d9cc;border-radius:7px;padding:6px 12px;font-size:12.5px;${
+                        orderPage <= 1 ? "opacity:.4;cursor:default" : "cursor:pointer"
+                      }`,
+                    )}
+                  >
+                    ← Prev
+                  </button>
+                  <span style={s("font:500 12px 'Geist Mono',monospace")}>
+                    Page {orderPage} of {orderTotalPages}
+                  </span>
+                  <button
+                    onClick={() => setOrderPage((p) => Math.min(orderTotalPages, p + 1))}
+                    disabled={orderPage >= orderTotalPages}
+                    style={s(
+                      `background:#fff;border:1px solid #e0d9cc;border-radius:7px;padding:6px 12px;font-size:12.5px;${
+                        orderPage >= orderTotalPages ? "opacity:.4;cursor:default" : "cursor:pointer"
+                      }`,
+                    )}
+                  >
+                    Next →
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : null}
 

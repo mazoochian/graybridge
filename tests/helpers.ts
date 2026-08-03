@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { signSession, SESSION_COOKIE } from "@/lib/auth";
 
 /** Short unique suffix for test-created rows (SKUs, emails, usernames, discount codes). */
 export function uniq(prefix: string): string {
@@ -13,6 +14,22 @@ export function jsonRequest(url: string, body: unknown, init?: { method?: string
     headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
     body: JSON.stringify(body),
   });
+}
+
+export function getRequest(url: string, init?: { headers?: Record<string, string> }) {
+  return new NextRequest(url, { method: "GET", headers: init?.headers });
+}
+
+/** Signs a real admin session JWT (no HTTP round-trip) so route handler tests can act as an authenticated admin. */
+export async function adminAuthHeaders(username: string): Promise<Record<string, string>> {
+  const token = await signSession({ username });
+  return { cookie: `${SESSION_COOKIE}=${token}` };
+}
+
+export async function createTestAdmin() {
+  const username = uniq("admin");
+  const admin = await prisma.adminUser.create({ data: { username, passwordHash: "unused", role: "owner" } });
+  return admin;
 }
 
 interface TestProductOpts {

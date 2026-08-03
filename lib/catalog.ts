@@ -39,6 +39,7 @@ export interface Product {
   desc: string;
   variants: ProductVariant[];
   _ord: number;
+  archived: boolean;
 }
 
 interface CatDef {
@@ -178,6 +179,7 @@ export function buildCatalog(): Product[] {
         desc: "",
         variants,
         _ord: k,
+        archived: false,
       });
       id++;
     }

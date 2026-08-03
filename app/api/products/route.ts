@@ -20,8 +20,13 @@ function parseVariants(body: unknown): VariantInput[] | null {
     .filter((v) => v.size && v.color);
 }
 
-export async function GET() {
-  const rows = await prisma.product.findMany({ include: { variants: true }, orderBy: { id: "asc" } });
+export async function GET(req: NextRequest) {
+  // Archived products are hidden from public storefront visitors, but the
+  // admin dashboard (which reuses this same endpoint for its catalog
+  // state) needs to see them too, so it can offer an "unarchive" action.
+  const session = await getSessionFromRequest(req);
+  const where = session ? {} : { archived: false };
+  const rows = await prisma.product.findMany({ where, include: { variants: true }, orderBy: { id: "asc" } });
   return NextResponse.json(rows.map(serializeProduct));
 }
 

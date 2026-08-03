@@ -18,5 +18,6 @@ export function serializeProduct(row: DbProduct & { variants?: DbVariant[] }): P
     desc: row.desc,
     variants: (row.variants ?? []).map((v) => ({ size: v.size, color: v.color, stock: v.stock })),
     _ord: row.ord,
+    archived: row.archived,
   };
 }

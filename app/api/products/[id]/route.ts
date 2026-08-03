@@ -44,6 +44,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (Array.isArray(body.colors)) data.colors = JSON.stringify(body.colors);
   if (Array.isArray(body.tags)) data.tags = JSON.stringify(body.tags);
   if (typeof body.desc === "string") data.desc = body.desc;
+  if (typeof body.archived === "boolean") data.archived = body.archived;
 
   const variants = parseVariants(body);
   if (variants) {
@@ -60,6 +61,28 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
       return tx.product.update({ where: { id }, data, include: { variants: true } });
     });
+    return NextResponse.json(serializeProduct(updated));
+  } catch {
+    return NextResponse.json({ error: "Not found." }, { status: 404 });
+  }
+}
+
+/**
+ * Soft delete: archives the product instead of removing the row. Orders
+ * reference products by id (OrderItem.productId, with the name/sku/price
+ * separately snapshotted at purchase time) and wishlists do too
+ * (WishlistItem.productId) — a hard delete would either violate that
+ * history or require cascading cleanup that destroys it. Archived
+ * products are excluded from the public storefront's catalog but remain
+ * visible (and restorable) in the admin dashboard.
+ */
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getSessionFromRequest(req);
+  if (!session) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+
+  const id = Number((await params).id);
+  try {
+    const updated = await prisma.product.update({ where: { id }, data: { archived: true }, include: { variants: true } });
     return NextResponse.json(serializeProduct(updated));
   } catch {
     return NextResponse.json({ error: "Not found." }, { status: 404 });

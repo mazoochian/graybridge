@@ -13,6 +13,12 @@ next-env.d.ts
 /public/uploads
 /local-mail
 
+# Playwright
+/test-results
+/playwright-report
+/blob-report
+/playwright/.cache
+
 # Auto-installed skill bundles (regenerated from skills-lock.json)
 /.agents/skills
 /.claude/skills
