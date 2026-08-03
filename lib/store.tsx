@@ -28,6 +28,9 @@ export interface Customer {
 interface StoreValue {
   catalog: Product[];
   setCatalog: Dispatch<SetStateAction<Product[]>>;
+  catalogLoading: boolean;
+  catalogError: boolean;
+  reloadCatalog: () => void;
   cart: CartItem[];
   cartOpen: boolean;
   toast: string;
@@ -56,6 +59,8 @@ export function useStore(): StoreValue {
 
 export function Providers({ children }: { children: ReactNode }) {
   const [catalog, setCatalog] = useState<Product[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [toast, setToast] = useState("");
@@ -71,15 +76,24 @@ export function Providers({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  useEffect(() => {
+  const loadCatalog = () => {
+    setCatalogLoading(true);
+    setCatalogError(false);
     fetch("/api/products")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`products fetch failed: ${r.status}`);
+        return r.json();
+      })
       .then((rows) => {
         if (Array.isArray(rows)) setCatalog(rows);
+        else throw new Error("unexpected /api/products response shape");
       })
-      .catch(() => {
-        /* ignore — storefront just shows an empty catalog until retry/refresh */
-      });
+      .catch(() => setCatalogError(true))
+      .finally(() => setCatalogLoading(false));
+  };
+
+  useEffect(() => {
+    loadCatalog();
   }, []);
 
   const [customer, setCustomer] = useState<Customer | null>(null);
@@ -191,6 +205,9 @@ export function Providers({ children }: { children: ReactNode }) {
   const value: StoreValue = {
     catalog,
     setCatalog,
+    catalogLoading,
+    catalogError,
+    reloadCatalog: loadCatalog,
     cart,
     cartOpen,
     toast,

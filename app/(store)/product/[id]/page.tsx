@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { notFound, useParams, useRouter } from "next/navigation";
 import { badgeOf, cats, desc, img, SIZES, swatchHex } from "@/lib/catalog";
 import { useStore } from "@/lib/store";
 import { s } from "@/lib/style";
@@ -11,17 +11,42 @@ import { ProductCard } from "@/components/ProductCard";
 export default function ProductPage() {
   const router = useRouter();
   const routeParams = useParams();
-  const { catalog, addToCart } = useStore();
+  const { catalog, catalogLoading, catalogError, reloadCatalog, addToCart } = useStore();
 
-  const id = Number(Array.isArray(routeParams.id) ? routeParams.id[0] : routeParams.id);
-  const p = catalog.find((x) => x.id === id) || catalog[0];
+  const rawId = Array.isArray(routeParams.id) ? routeParams.id[0] : routeParams.id;
+  const id = Number(rawId);
+  const p = catalog.find((x) => x.id === id);
 
   const [size, setSize] = useState("M");
   const [qty, setQty] = useState(1);
   const [imgIdx, setImgIdx] = useState(0);
   const [colorIdx, setColorIdx] = useState(0);
 
-  if (!p) return null;
+  if (!p) {
+    // Not a numeric id at all — never going to resolve, no point waiting.
+    if (!Number.isInteger(id)) notFound();
+
+    if (catalogLoading) {
+      return <main style={s("flex:1;max-width:1280px;margin:0 auto;width:100%;padding:60px 28px;color:#8a8275")}>Loading…</main>;
+    }
+    if (catalogError) {
+      return (
+        <main style={s("flex:1;max-width:1280px;margin:0 auto;width:100%;padding:60px 28px;display:flex;flex-direction:column;gap:14px;align-items:flex-start")}>
+          <p style={s("color:#5f5a52;font-size:15px")}>Couldn't load this product. Check your connection and try again.</p>
+          <Hv
+            as="button"
+            onClick={reloadCatalog}
+            css="background:#1a1714;color:#fff;border:none;padding:11px 20px;border-radius:9px;font-size:14px;font-weight:500;cursor:pointer"
+            hover="background:#332e28"
+          >
+            Retry
+          </Hv>
+        </main>
+      );
+    }
+    // Catalog loaded successfully and this id genuinely isn't in it.
+    notFound();
+  }
 
   const pool = (cats[p.cat] || cats["T-Shirts"]).ids;
   const gallery = [p.imgId].concat(pool.filter((x) => x !== p.imgId)).slice(0, 3);
