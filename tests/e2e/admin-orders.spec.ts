@@ -100,7 +100,9 @@ test("tracking carrier/number can be saved and persists across reload", async ({
   await carrierInput.fill("UPS");
   await trackingInput.fill("1Z999AA10123456784");
   await trackingInput.blur();
-  await page.waitForTimeout(500); // let the onBlur PATCH land
+  // Carrier/Tracking # save is debounced (500ms) into a single combined
+  // PATCH — wait comfortably past that before reloading.
+  await page.waitForTimeout(900);
 
   await page.reload();
   await page.getByText("Orders", { exact: true }).click();

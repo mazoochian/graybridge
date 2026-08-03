@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { catOptions, cats, desc, img, SIZES, type Product } from "@/lib/catalog";
 import { useStore } from "@/lib/store";
@@ -234,11 +234,23 @@ export default function AdminPage() {
     }
   };
 
-  const setOrderField = (id: number, field: "carrier" | "trackingNumber", value: string) => {
-    setOrders((os) => os.map((o) => (o.id === id ? { ...o, [field]: value } : o)));
-  };
+  // Carrier and Tracking # are two separate inputs but one logical save.
+  // Saving independently per-field on blur used to fire two PATCH
+  // requests (one per field) with whatever the *other* field's value
+  // happened to be at that instant — tabbing from Carrier to Tracking #
+  // blurs Carrier before Tracking # has been typed, so that PATCH could
+  // carry a stale/empty trackingNumber. If it then resolved *after* the
+  // second (complete) PATCH, it would silently clobber the tracking
+  // number back to empty. Fixed by debouncing a single combined save per
+  // order (keyed by id) that always reads the latest state when it
+  // fires, plus a per-order sequence guard so an old in-flight request
+  // can never overwrite a newer one's result.
+  const trackingSaveTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+  const trackingSaveSeq = useRef<Map<number, number>>(new Map());
 
-  const updateOrderTracking = async (id: number, carrier: string, trackingNumber: string) => {
+  const commitOrderTracking = async (id: number, carrier: string, trackingNumber: string) => {
+    const seq = (trackingSaveSeq.current.get(id) ?? 0) + 1;
+    trackingSaveSeq.current.set(id, seq);
     try {
       const res = await fetch(`/api/orders/${id}`, {
         method: "PATCH",
@@ -246,10 +258,28 @@ export default function AdminPage() {
         body: JSON.stringify({ carrier, trackingNumber }),
       });
       if (!res.ok) throw new Error();
-      showToast("Tracking info saved", 1800);
+      if (trackingSaveSeq.current.get(id) === seq) showToast("Tracking info saved", 1800);
     } catch {
-      showToast("Could not save tracking info", 2600);
+      if (trackingSaveSeq.current.get(id) === seq) showToast("Could not save tracking info", 2600);
     }
+  };
+
+  const setOrderField = (id: number, field: "carrier" | "trackingNumber", value: string) => {
+    setOrders((os) => os.map((o) => (o.id === id ? { ...o, [field]: value } : o)));
+
+    const existingTimer = trackingSaveTimers.current.get(id);
+    if (existingTimer) clearTimeout(existingTimer);
+    trackingSaveTimers.current.set(
+      id,
+      setTimeout(() => {
+        trackingSaveTimers.current.delete(id);
+        setOrders((current) => {
+          const row = current.find((o) => o.id === id);
+          if (row) commitOrderTracking(id, row.carrier, row.trackingNumber);
+          return current;
+        });
+      }, 500),
+    );
   };
 
   const [discounts, setDiscounts] = useState<DiscountCode[]>([]);
@@ -1030,14 +1060,12 @@ export default function AdminPage() {
                         <input
                           value={o.carrier}
                           onChange={(e) => setOrderField(o.id, "carrier", e.target.value)}
-                          onBlur={(e) => updateOrderTracking(o.id, e.target.value, o.trackingNumber)}
                           placeholder="Carrier"
                           style={s("border:1px solid #e7e0d3;border-radius:6px;padding:4px 7px;font-size:11.5px;width:100%")}
                         />
                         <input
                           value={o.trackingNumber}
                           onChange={(e) => setOrderField(o.id, "trackingNumber", e.target.value)}
-                          onBlur={(e) => updateOrderTracking(o.id, o.carrier, e.target.value)}
                           placeholder="Tracking #"
                           style={s("border:1px solid #e7e0d3;border-radius:6px;padding:4px 7px;font-size:11.5px;width:100%;font-family:'Geist Mono',monospace")}
                         />
