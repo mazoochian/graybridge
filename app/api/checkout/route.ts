@@ -150,10 +150,19 @@ export async function POST(req: NextRequest) {
       const order = await tx.order.update({ where: { id: created.id }, data: { orderNumber }, include: { items: true } });
 
       for (const { id, size, color, qty } of requestedByVariant.values()) {
-        await tx.productVariant.update({
-          where: { productId_size_color: { productId: id, size, color } },
+        const p = productMap.get(id)!;
+        // Atomic guarded decrement: the WHERE clause (including stock >= qty)
+        // is evaluated by Postgres as part of the single UPDATE, so two
+        // concurrent checkouts on the same low-stock variant can't both pass.
+        // Whichever transaction commits first wins; the loser sees
+        // updatedCount === 0 and the whole checkout transaction aborts.
+        const updated = await tx.productVariant.updateMany({
+          where: { productId: id, size, color, stock: { gte: qty } },
           data: { stock: { decrement: qty } },
         });
+        if (updated.count === 0) {
+          throw new Error(`"${p.name}" (${color}, size ${size}) just sold out — please remove it from your bag.`);
+        }
       }
       for (const [id, qty] of requestedById) {
         await tx.product.update({ where: { id }, data: { stock: { decrement: qty } } });

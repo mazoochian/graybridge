@@ -189,3 +189,102 @@ Test data (2 created products) was deleted afterward; catalog is back to
   numbers: there is no UI anywhere for a customer to submit a review.
 - No analytics/marketing integrations (no email capture beyond order
   confirmation, no abandoned-cart flow, etc.).
+
+## Overnight session 2 (2026-08-03) — gap-analysis fixes
+
+A full gap-analysis pass was done at the end of session 1 (crash recovery
++ Postgres migration + CSV import/export, all above). This session works
+through the greenlit findings from that pass, in priority order. Held
+items (Next.js CVE upgrade, real legal policy text, VPS-specific deploy
+choices) are intentionally *not* done here — see the plan for why.
+
+### 1. Checkout stock oversell race condition — fixed
+
+`app/api/checkout/route.ts` used to check `variant.stock < qty` and then
+do an unconditional `tx.productVariant.update({ data: { stock: {
+decrement: qty } } })` later in the same transaction — two concurrent
+checkouts on a low-stock variant could both pass the check and both
+decrement, taking stock negative. Fixed by replacing the decrement with
+`tx.productVariant.updateMany({ where: { ..., stock: { gte: qty } }, data:
+{ stock: { decrement: qty } } })` and checking `result.count`; if 0 rows
+matched, the transaction throws and rolls back with a "just sold out"
+error instead of overselling. This is atomic because Postgres evaluates
+the `WHERE` clause as part of the single `UPDATE` statement — safe under
+the default Read Committed isolation Prisma uses for interactive
+transactions, no need for `SERIALIZABLE` or manual row locking.
+
+Verified with an automated regression test (see below) that spins up two
+concurrent checkout requests against a variant with `stock: 1`: exactly
+one gets `201`, the other gets `400`, and final stock is `0`, never
+negative. To make sure the test wasn't a false positive, it was run once
+against the old buggy code (temporarily reverted) — it failed as expected
+(`[201, 201]`, stock went negative) — then the fix was restored and the
+test passes again.
+
+### 2. Rate limiting on login endpoints — added
+
+`/api/auth/login` (admin) and `/api/account/login` (customer) had no
+brute-force protection at all. Added `lib/rate-limit.ts`: an in-memory,
+per-process, fixed-window limiter (`checkRateLimit(key, {max, windowMs})`).
+Deliberately simple/in-memory because Graybridge deploys as a single Node
+process on one VPS, not serverless/multi-instance — if that ever changes,
+swap the store for something shared (Redis etc.), every call site goes
+through the one function.
+
+Both login routes now check two independent limits before touching the
+DB or bcrypt:
+- **Per source IP** (`x-forwarded-for` / `x-real-ip`, falls back to
+  `"unknown"`): 20 attempts / 15 min — throttles enumeration sweeps
+  across many usernames from one IP.
+- **Per identifier** (username or email, case-normalized): 5 attempts /
+  15 min — protects one account against distributed brute force
+  regardless of source IP.
+
+Either limit hit returns `429` with a `Retry-After` header, before any
+password comparison. Covered by `tests/api/auth-login.test.ts`.
+
+### 3. Test framework bootstrapped — Vitest
+
+There was no test framework configured at all before this session.
+Added Vitest (`vitest.config.mts`, `tests/setup.ts`, `tests/helpers.ts`),
+starting with the checkout/auth/inventory critical path as instructed:
+
+- `tests/lib/rate-limit.test.ts` — pure unit tests for the limiter.
+- `tests/lib/cart-utils.test.ts` — tax/shipping/discount math regression
+  tests (this logic was already solid per the gap analysis; now it's
+  pinned down).
+- `tests/api/checkout.test.ts` — integration tests against a real
+  Postgres DB: normal stock decrement, insufficient-stock rejection, the
+  oversell race-condition regression test described above, unknown
+  product id, empty cart.
+- `tests/api/auth-login.test.ts` — integration tests: successful login,
+  wrong password, and the new rate limiting (both per-IP and
+  per-identifier) for both admin and customer login.
+
+Run with `npm test` (or `npm run test:watch`).
+
+**Test database**: a second Postgres database, `graybridge_test`, was
+created on the same local dev container (`graybridge-pg`, port 5434) —
+tests never touch the seeded 150-product dev catalog. Connection info
+lives in `.env.test` (gitignored, like `.env`). `tests/setup.ts` loads it
+via `dotenv` before any app module is imported, and hard-fails if
+`DATABASE_URL` doesn't contain `graybridge_test` — a deliberate guard
+rail so a misconfigured run can't ever hit the dev/prod database.
+
+To recreate the test DB from scratch (e.g. on a fresh clone, or after a
+schema change):
+```
+docker exec graybridge-pg psql -U graybridge -d graybridge -c "CREATE DATABASE graybridge_test OWNER graybridge;"
+DATABASE_URL="postgresql://graybridge:graybridge_dev_pw@127.0.0.1:5434/graybridge_test?schema=public" npx prisma migrate deploy
+```
+Integration tests create their own rows (unique SKUs/emails/usernames via
+`tests/helpers.ts`'s `uniq()`) and delete them in `afterEach`/`afterAll` —
+the test DB is expected to stay empty between runs, but nothing breaks if
+stray rows accumulate since everything is scoped by unique identifiers.
+
+**Not done yet**: no CI wiring (no GitHub Actions/etc. — the repo has no
+git remote configured to run CI against), no component/E2E tests (no
+Playwright installed yet — flagged for the riskier UI-changing items
+later in this same session, e.g. admin order tracking UI, pagination).
+Coverage is deliberately narrow (critical path only) per the plan, not
+exhaustive.
