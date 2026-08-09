@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./helpers";
 
 // The store is still in payment test-mode (lib/payment.ts always
 // "succeeds" — no real processor connected). Visa/Mastercard/Amex/

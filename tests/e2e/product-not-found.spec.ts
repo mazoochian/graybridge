@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./helpers";
 
 // Regression coverage for the "falls back to catalog[0] instead of 404"
 // bug in app/(store)/product/[id]/page.tsx, plus the new error/not-found

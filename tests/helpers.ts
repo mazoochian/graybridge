@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { signSession, SESSION_COOKIE } from "@/lib/auth";
+import { signCustomerSession, CUSTOMER_SESSION_COOKIE } from "@/lib/customer-auth";
 
 /** Short unique suffix for test-created rows (SKUs, emails, usernames, discount codes). */
 export function uniq(prefix: string): string {
@@ -24,6 +25,20 @@ export function getRequest(url: string, init?: { headers?: Record<string, string
 export async function adminAuthHeaders(username: string): Promise<Record<string, string>> {
   const token = await signSession({ username });
   return { cookie: `${SESSION_COOKIE}=${token}` };
+}
+
+/** Signs a real customer session JWT so route handler tests can act as a signed-in shopper. */
+export async function customerAuthHeaders(customerId: number, email: string): Promise<Record<string, string>> {
+  const token = await signCustomerSession({ customerId, email });
+  return { cookie: `${CUSTOMER_SESSION_COOKIE}=${token}` };
+}
+
+export async function createTestCustomer() {
+  const email = `${uniq("cust")}@example.com`;
+  const customer = await prisma.customer.create({
+    data: { email, name: "Test Shopper", passwordHash: "unused" },
+  });
+  return customer;
 }
 
 export async function createTestAdmin() {

@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./helpers";
 
 // The shop/browse page used to render the entire eagerly-fetched
 // app-wide catalog (all ~150 products + ~2000 variant rows) with
@@ -6,16 +6,22 @@ import { test, expect } from "@playwright/test";
 // paginated slice from /api/products?page=&pageSize=... directly.
 
 test("the shop page's product request is paginated, not the full catalog", async ({ page }) => {
-  const productRequests: string[] = [];
-  page.on("request", (req) => {
-    if (req.url().includes("/api/products")) productRequests.push(req.url());
-  });
+  // Armed before navigating, and awaited directly, so this doesn't depend
+  // on the fetch happening to be observed before some other condition
+  // settles. An earlier version collected requests via page.on("request")
+  // and then asserted after waiting for the item count to render — the
+  // app-wide catalog fetch can satisfy that gate on its own, so whether
+  // the shop's own paginated request had fired yet came down to incidental
+  // page-load timing.
+  const paginatedRequest = page.waitForRequest(
+    (req) => req.url().includes("/api/products") && req.url().includes("page=") && req.url().includes("pageSize="),
+    { timeout: 10_000 },
+  );
 
   await page.goto("/shop");
-  await expect(page.locator("main")).toContainText("items", { timeout: 10_000 });
 
-  const paginatedRequest = productRequests.find((u) => u.includes("page=") && u.includes("pageSize="));
-  expect(paginatedRequest).toBeTruthy();
+  expect((await paginatedRequest).url()).toContain("pageSize=");
+  await expect(page.locator("main")).toContainText("items", { timeout: 10_000 });
 });
 
 test("shop page pagination controls move between pages without duplicating results", async ({ page }) => {

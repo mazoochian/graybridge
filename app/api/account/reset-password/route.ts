@@ -3,8 +3,20 @@ import { createHash } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { CUSTOMER_SESSION_COOKIE, signCustomerSession } from "@/lib/customer-auth";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+
+function rateLimited(retryAfterSeconds: number) {
+  return NextResponse.json(
+    { error: "Too many attempts. Please try again later." },
+    { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } },
+  );
+}
 
 export async function POST(req: NextRequest) {
+  const ip = getClientIp(req);
+  const ipLimit = checkRateLimit(`reset-password:ip:${ip}`, { max: 10, windowMs: 15 * 60 * 1000 });
+  if (!ipLimit.allowed) return rateLimited(ipLimit.retryAfterSeconds);
+
   const body = await req.json().catch(() => null);
   const token = typeof body?.token === "string" ? body.token : "";
   const password = typeof body?.password === "string" ? body.password : "";

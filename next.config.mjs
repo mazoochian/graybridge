@@ -1,3 +1,5 @@
+import { withSentryConfig } from "@sentry/nextjs";
+
 // Content-Security-Policy notes:
 // - script-src/style-src need 'unsafe-inline': Next.js injects an inline
 //   hydration payload <script>, and this app renders styling via React's
@@ -22,13 +24,29 @@
 //   Production builds (`next build`/`next start`) don't use eval, so
 //   'unsafe-eval' is deliberately left out there.
 const isDev = process.env.NODE_ENV !== "production";
+
+// Sentry's browser SDK posts events straight to the DSN's own ingest host,
+// so connect-src needs that origin added — but only if a DSN is actually
+// configured (see instrumentation-client.ts); otherwise leave the CSP as
+// tight as before.
+const sentryDsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
+const sentryConnectSrc = (() => {
+  if (!sentryDsn) return "";
+  try {
+    const { hostname, protocol } = new URL(sentryDsn);
+    return ` ${protocol}//${hostname}`;
+  } catch {
+    return "";
+  }
+})();
+
 const CSP = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "img-src 'self' data: https://images.unsplash.com",
   "font-src 'self' data: https://fonts.gstatic.com",
-  "connect-src 'self'",
+  `connect-src 'self'${sentryConnectSrc}`,
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
@@ -66,4 +84,15 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+// withSentryConfig no-ops the parts that need credentials (source map
+// upload/release creation) when SENTRY_AUTH_TOKEN isn't set — it just
+// skips them with a log line, doesn't fail the build. So this is safe to
+// leave on unconditionally; error reporting itself is gated by DSN
+// presence in sentry.server.config.ts/sentry.edge.config.ts/
+// instrumentation-client.ts instead.
+export default withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: true,
+});

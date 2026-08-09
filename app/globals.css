@@ -35,6 +35,111 @@ select:focus {
   border-color: #1a1714;
 }
 
+/* Header responsive breakpoint. lib/style.ts's s() only produces static
+   inline styles (no media query support), so — same as .gb-focus above —
+   anything CSS can do that inline styles can't lives here instead. Below
+   900px the nav links + search bar no longer fit the header in one row
+   (confirmed: the header is the widest element on every page at mobile
+   viewports, causing site-wide horizontal scroll) and move into
+   Header.tsx's slide-down mobile menu instead. */
+.gb-header-desktop-nav {
+  display: flex;
+}
+.gb-header-hamburger {
+  display: none;
+}
+@media (max-width: 900px) {
+  .gb-header-desktop-nav {
+    display: none;
+  }
+  .gb-header-hamburger {
+    display: flex;
+  }
+}
+/* Mobile menu panel itself: only ever rendered (Header.tsx) while open,
+   this is belt-and-suspenders so it also disappears via CSS if the
+   viewport is resized past 900px while open, rather than only on the
+   next state change. */
+.gb-mobile-menu-panel {
+  display: none;
+}
+@media (max-width: 900px) {
+  .gb-mobile-menu-panel {
+    display: flex;
+  }
+}
+
+/* Storefront grid layouts, same rationale as the header rules above.
+   Each grid keeps its normal-width column ratio via one of the base
+   classes, then the shared media-query rules further down override
+   grid-template-columns for that same class at narrow widths. This
+   relies on source order, not !important: at a matching width both the
+   base rule and the media rule apply with equal specificity (one class
+   each), so the one declared later here — the media rule — wins.
+   minmax(0, …) (rather than a bare fr) on every track additionally
+   stops a column from being forced wider than its share by a child's
+   min-content size (e.g. a large heading) — without it, a 2-column grid
+   can overflow the viewport well before either breakpoint below is
+   reached, which is what was actually happening on the homepage hero. */
+.gb-split-104 {
+  grid-template-columns: minmax(0, 1.04fr) minmax(0, 0.96fr);
+}
+.gb-split-11 {
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+}
+.gb-split-even {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.gb-sidebar-340 {
+  grid-template-columns: minmax(0, 1fr) 340px;
+}
+.gb-sidebar-218 {
+  grid-template-columns: 218px minmax(0, 1fr);
+}
+.gb-cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.gb-cols-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.gb-row-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.gb-row-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 760px) {
+  .gb-split-104,
+  .gb-split-11,
+  .gb-split-even {
+    /* minmax(0, 1fr), not a bare 1fr — a single bare fr track still
+       respects its content's min-content width, which is exactly the
+       bug this whole file exists to avoid. Confirmed by testing: with a
+       bare 1fr here, the homepage's dark banner still painted past the
+       viewport at 320px even though this rule had correctly matched. */
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 860px) {
+  .gb-sidebar-340,
+  .gb-sidebar-218 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 620px) {
+  .gb-cols-3,
+  .gb-cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 480px) {
+  .gb-row-2,
+  .gb-row-3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @keyframes gbFade {
   from {
     opacity: 0;

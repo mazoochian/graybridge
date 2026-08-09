@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import * as Sentry from "@sentry/nextjs";
 
 // Root-level error boundary for anything outside the (store) group (which
 // has its own richer error.tsx with site chrome). Dependency-free by
@@ -9,6 +10,7 @@ import { useEffect } from "react";
 export default function RootError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
     console.error("[root error boundary]", error);
+    Sentry.captureException(error);
   }, [error]);
 
   return (

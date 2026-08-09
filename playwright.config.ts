@@ -1,4 +1,13 @@
 import { defineConfig } from "@playwright/test";
+import { config as loadEnv } from "dotenv";
+
+// Specs that assert on whole-product aggregates need to reset that
+// product's rows first (see tests/e2e/product-reviews.spec.ts), which
+// means the *test* process — not just the dev server it drives — needs
+// DATABASE_URL. Next loads .env for the server automatically; nothing
+// loads it for Playwright itself, so do it here. This deliberately
+// points at the dev database, the same one the webServer below uses.
+loadEnv({ path: ".env" });
 
 const PORT = 3100;
 

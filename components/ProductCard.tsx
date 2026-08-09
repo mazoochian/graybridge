@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { badgeOf, img, type Product } from "@/lib/catalog";
 import { useStore } from "@/lib/store";
@@ -33,8 +34,11 @@ export function ProductCard({ p, i = 0, showAdd, showBadge, showCat, showWas }: 
         )}
       >
         <Hv
-          as="img"
-          css="width:100%;height:100%;object-fit:cover;transition:transform .65s cubic-bezier(.2,.7,.2,1)"
+          as={Image}
+          fill
+          sizes="(max-width: 620px) 50vw, (max-width: 1024px) 33vw, 25vw"
+          priority={i < 4}
+          css="object-fit:cover;transition:transform .65s cubic-bezier(.2,.7,.2,1)"
           hover="transform:scale(1.06)"
           src={img(p.imgId, 500)}
           alt={p.name}

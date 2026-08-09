@@ -1,4 +1,5 @@
-import { test, expect, request as pwRequest, type Cookie } from "@playwright/test";
+import { request as pwRequest, type Cookie } from "@playwright/test";
+import { test, expect } from "./helpers";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 

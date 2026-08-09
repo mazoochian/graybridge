@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { cartLines, cartTotals } from "@/lib/cart-utils";
 import { useStore } from "@/lib/store";
@@ -33,16 +34,17 @@ export default function CartPage() {
           </button>
         </div>
       ) : (
-        <div style={s("display:grid;grid-template-columns:1fr 340px;gap:40px;align-items:start")}>
+        <div className="gb-sidebar-340" style={s("display:grid;gap:40px;align-items:start")}>
           <div style={s("display:flex;flex-direction:column;animation:gbFade .5s both")}>
             {lines.map((i) => (
               <div key={i.key} style={s("display:flex;gap:18px;padding:20px 0;border-bottom:1px solid #e7e0d3")}>
                 <div
                   onClick={() => router.push("/product/" + i.id)}
-                  style={s("width:92px;height:114px;border-radius:11px;overflow:hidden;background:#f1ece2;flex-shrink:0;cursor:pointer")}
+                  style={s(
+                    "position:relative;width:92px;height:114px;border-radius:11px;overflow:hidden;background:#f1ece2;flex-shrink:0;cursor:pointer",
+                  )}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={i.img} alt={i.name} style={s("width:100%;height:100%;object-fit:cover")} />
+                  <Image src={i.img} alt={i.name} fill sizes="92px" style={s("object-fit:cover")} />
                 </div>
                 <div style={s("flex:1;display:flex;flex-direction:column;gap:6px")}>
                   <div style={s("display:flex;justify-content:space-between;gap:12px")}>

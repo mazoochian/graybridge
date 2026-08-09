@@ -11,6 +11,7 @@ function product(overrides: Partial<Product> = {}): Product {
     price: 40,
     wasPrice: null,
     imgId: "x",
+    images: ["x"],
     colors: ["Black"],
     tags: [],
     rating: "5",

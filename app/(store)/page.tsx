@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { img } from "@/lib/catalog";
 import { useStore } from "@/lib/store";
@@ -28,15 +29,14 @@ export default function HomePage() {
     <main style={s("flex:1")}>
       {/* hero */}
       <section
-        style={s(
-          "max-width:1280px;margin:0 auto;display:grid;grid-template-columns:1.04fr .96fr;gap:48px;align-items:center;padding:72px 28px 60px",
-        )}
+        className="gb-split-104"
+        style={s("max-width:1280px;margin:0 auto;display:grid;gap:48px;align-items:center;padding:72px 28px 60px")}
       >
         <div style={s("display:flex;flex-direction:column;gap:26px;animation:gbFade .8s both")}>
           <span style={s("font:500 12px 'Geist Mono',monospace;letter-spacing:.18em;color:#c2410c")}>
             AUTUMN 2026 · NEW IN
           </span>
-          <h1 style={s("font-size:60px;line-height:1.0;letter-spacing:-.035em;font-weight:600;margin:0")}>
+          <h1 style={s("font-size:clamp(34px,8vw,60px);line-height:1.0;letter-spacing:-.035em;font-weight:600;margin:0")}>
             Considered essentials, made to last.
           </h1>
           <p style={s("font-size:17.5px;line-height:1.6;color:#5f5a52;margin:0;max-width:440px")}>
@@ -55,7 +55,7 @@ export default function HomePage() {
             <Hv
               as="button"
               onClick={() => router.push("/about")}
-              css="background:transparent;color:#1a1714;border:1px solid #d6cfc2;padding:16px 28px;border-radius:10px;font-size:15px;font-weight:500;cursor:pointer;transition:border-color .25s,transform .25s"
+              css="background:transparent;color:#1a1714;border-width:1px;border-style:solid;border-color:#d6cfc2;padding:16px 28px;border-radius:10px;font-size:15px;font-weight:500;cursor:pointer;transition:border-color .25s,transform .25s"
               hover="border-color:#1a1714;transform:translateY(-2px)"
             >
               Our story
@@ -79,14 +79,16 @@ export default function HomePage() {
         <div style={s("position:relative;animation:gbScale 1s both")}>
           <div
             style={s(
-              "aspect-ratio:4/5;border-radius:20px;overflow:hidden;background:#eceae4;box-shadow:0 40px 80px -50px rgba(40,30,20,.6)",
+              "position:relative;aspect-ratio:4/5;border-radius:20px;overflow:hidden;background:#eceae4;box-shadow:0 40px 80px -50px rgba(40,30,20,.6)",
             )}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <Image
               src={img("1503341504253-dff4815485f1", 900)}
               alt="Graybridge collection"
-              style={s("width:100%;height:100%;object-fit:cover")}
+              fill
+              sizes="(max-width: 760px) 100vw, 480px"
+              priority
+              style={s("object-fit:cover")}
             />
           </div>
           <div
@@ -103,7 +105,7 @@ export default function HomePage() {
 
       {/* category tiles */}
       <section style={s("max-width:1280px;margin:0 auto;padding:8px 28px 20px")}>
-        <div style={s("display:grid;grid-template-columns:repeat(3,1fr);gap:16px")}>
+        <div className="gb-cols-3" style={s("display:grid;gap:16px")}>
           {TILE_DEFS.map((t, i) => (
             <div
               key={t[0]}
@@ -120,7 +122,11 @@ export default function HomePage() {
                 alt={t[0]}
               />
               <div style={s("position:absolute;inset:0;background:linear-gradient(transparent 45%,rgba(20,15,10,.5))")} />
-              <div style={s("position:absolute;left:18px;bottom:16px;display:flex;align-items:center;gap:10px")}>
+              <div
+                style={s(
+                  "position:absolute;left:18px;right:18px;bottom:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap",
+                )}
+              >
                 <span style={s("color:#fff;font-size:17px;font-weight:600;letter-spacing:-.01em")}>{t[0]}</span>
                 <span style={s("font:400 11px 'Geist Mono',monospace;color:rgba(255,255,255,.8)")}>
                   {catCount(t[0])} styles
@@ -162,7 +168,7 @@ export default function HomePage() {
             </button>
           </div>
         ) : (
-          <div style={s("display:grid;grid-template-columns:repeat(4,1fr);gap:22px")}>
+          <div className="gb-cols-4" style={s("display:grid;gap:22px")}>
             {newArrivals.map((p, i) => (
               <ProductCard key={p.id} p={p} i={i} showAdd showBadge showCat />
             ))}
@@ -172,14 +178,12 @@ export default function HomePage() {
 
       {/* standard banner */}
       <section style={s("max-width:1280px;margin:40px auto 0;padding:0 28px")}>
-        <div
-          style={s("background:#1a1714;border-radius:24px;overflow:hidden;display:grid;grid-template-columns:1.1fr .9fr")}
-        >
+        <div className="gb-split-11" style={s("background:#1a1714;border-radius:24px;overflow:hidden;display:grid")}>
           <div style={s("padding:56px 56px;display:flex;flex-direction:column;gap:20px;justify-content:center")}>
             <span style={s("font:500 12px 'Geist Mono',monospace;letter-spacing:.16em;color:#e08a5b")}>
               THE GRAYBRIDGE STANDARD
             </span>
-            <h2 style={s("font-size:36px;line-height:1.08;letter-spacing:-.025em;font-weight:600;margin:0;color:#fff")}>
+            <h2 style={s("font-size:clamp(26px,7vw,36px);line-height:1.08;letter-spacing:-.025em;font-weight:600;margin:0;color:#fff")}>
               Fewer, better things — built to be worn for years.
             </h2>
             <p style={s("font-size:16px;line-height:1.6;color:#b3aca0;margin:0;max-width:430px")}>
@@ -197,7 +201,7 @@ export default function HomePage() {
               <Hv
                 as="button"
                 onClick={() => router.push("/about")}
-                css="background:transparent;color:#fff;border:1px solid #44403a;padding:14px 24px;border-radius:9px;font-size:14.5px;font-weight:500;cursor:pointer;transition:border-color .25s"
+                css="background:transparent;color:#fff;border-width:1px;border-style:solid;border-color:#44403a;padding:14px 24px;border-radius:9px;font-size:14.5px;font-weight:500;cursor:pointer;transition:border-color .25s"
                 hover="border-color:#fff"
               >
                 How we make it
@@ -205,11 +209,12 @@ export default function HomePage() {
             </div>
           </div>
           <div style={s("position:relative;min-height:340px;background:#26211c")}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <Image
               src="https://images.unsplash.com/photo-1445205170230-053b83016050?fm=jpg&q=70&w=900&auto=format&fit=crop"
               alt="Studio"
-              style={s("width:100%;height:100%;object-fit:cover;opacity:.92")}
+              fill
+              sizes="(max-width: 760px) 100vw, 50vw"
+              style={s("object-fit:cover;opacity:.92")}
             />
           </div>
         </div>

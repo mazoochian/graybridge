@@ -1,4 +1,35 @@
-import type { Page } from "@playwright/test";
+import { test as base, type Page } from "@playwright/test";
+
+/**
+ * Base `test` with third-party requests blocked.
+ *
+ * app/globals.css @imports the Geist font family from
+ * fonts.googleapis.com, and product images come from images.unsplash.com.
+ * Both are real external requests the browser makes on essentially every
+ * page. If either host is slow or unreachable — CI without egress, a
+ * sandbox, an offline laptop, or just a bad day for the CDN — the request
+ * hangs rather than failing fast, the page's `load` event never fires,
+ * and every single `page.goto` times out. That failure mode is
+ * indistinguishable from a genuine app break, which makes it expensive to
+ * diagnose (it presents as "the entire suite broke at once").
+ *
+ * These tests assert on markup and behavior, never on which typeface
+ * rendered or whether a photo decoded, so aborting the requests loses no
+ * coverage — and it makes the suite hermetic and faster besides. Anything
+ * same-origin (the app itself, /api, /uploads) is untouched.
+ */
+export const test = base.extend({
+  page: async ({ page }, use) => {
+    await page.route("**/*", (route) => {
+      const url = new URL(route.request().url());
+      const isLocal = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+      return isLocal ? route.continue() : route.abort();
+    });
+    await use(page);
+  },
+});
+
+export { expect } from "@playwright/test";
 
 /**
  * Navigates to a real in-stock product's detail page, selects its

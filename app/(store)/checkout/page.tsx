@@ -135,11 +135,11 @@ export default function CheckoutPage() {
       <h1 style={s("font-size:34px;font-weight:600;letter-spacing:-.025em;margin:0 0 28px;animation:gbFade .4s both")}>
         Checkout
       </h1>
-      <form onSubmit={submit} style={s("display:grid;grid-template-columns:1fr 340px;gap:40px;align-items:start")}>
+      <form onSubmit={submit} className="gb-sidebar-340" style={s("display:grid;gap:40px;align-items:start")}>
         <div style={s("display:flex;flex-direction:column;gap:16px;animation:gbFade .5s both")}>
           <div style={s("background:#fff;border:1px solid #e7e0d3;border-radius:14px;padding:24px;display:flex;flex-direction:column;gap:16px")}>
             <div style={s("font-size:15px;font-weight:600")}>Contact</div>
-            <div style={s("display:grid;grid-template-columns:1fr 1fr;gap:14px")}>
+            <div className="gb-row-2" style={s("display:grid;gap:14px")}>
               <div style={s("display:flex;flex-direction:column;gap:6px")}>
                 <label style={s(LABEL_STYLE)}>Full name</label>
                 <input {...field("name")} placeholder="Jamie Rivera" required autoComplete="name" />
@@ -161,7 +161,7 @@ export default function CheckoutPage() {
               <label style={s(LABEL_STYLE)}>Address line 2 (optional)</label>
               <input {...field("line2")} placeholder="Apt, suite, etc." autoComplete="address-line2" />
             </div>
-            <div style={s("display:grid;grid-template-columns:1fr 1fr;gap:14px")}>
+            <div className="gb-row-2" style={s("display:grid;gap:14px")}>
               <div style={s("display:flex;flex-direction:column;gap:6px")}>
                 <label style={s(LABEL_STYLE)}>City</label>
                 <input {...field("city")} placeholder="Pittsburgh" required autoComplete="address-level2" />
@@ -171,7 +171,7 @@ export default function CheckoutPage() {
                 <input {...field("region")} placeholder="PA" required autoComplete="address-level1" />
               </div>
             </div>
-            <div style={s("display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px")}>
+            <div className="gb-row-3" style={s("display:grid;gap:14px")}>
               <div style={s("display:flex;flex-direction:column;gap:6px")}>
                 <label style={s(LABEL_STYLE)}>Postal code</label>
                 <input {...field("postalCode")} placeholder="15222" required autoComplete="postal-code" />

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { cartLines, cartTotals } from "@/lib/cart-utils";
 import { useStore } from "@/lib/store";
@@ -58,9 +59,12 @@ export function CartDrawer() {
             <div style={s("flex:1;overflow:auto;padding:8px 22px")}>
               {lines.map((i) => (
                 <div key={i.key} style={s("display:flex;gap:14px;padding:16px 0;border-bottom:1px solid #ece6da")}>
-                  <div style={s("width:64px;height:80px;border-radius:9px;overflow:hidden;background:#f1ece2;flex-shrink:0")}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={i.img} alt={i.name} style={s("width:100%;height:100%;object-fit:cover")} />
+                  <div
+                    style={s(
+                      "position:relative;width:64px;height:80px;border-radius:9px;overflow:hidden;background:#f1ece2;flex-shrink:0",
+                    )}
+                  >
+                    <Image src={i.img} alt={i.name} fill sizes="64px" style={s("object-fit:cover")} />
                   </div>
                   <div style={s("flex:1;display:flex;flex-direction:column;gap:4px")}>
                     <div style={s("font-size:14px;font-weight:500")}>{i.name}</div>

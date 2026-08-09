@@ -539,3 +539,517 @@ two things worth recording:
 true): real Privacy/Terms/Shipping/Returns legal text, and VPS-specific
 choices (process manager, reverse proxy/TLS, real CI/CD) beyond the
 generic Dockerfile/headers/env-template scaffolding from item 10.
+
+## Roadmap session, Tier 1 (2026-08-03)
+
+A `ROADMAP.md` was written recording a 4-tier improvement plan agreed
+with the owner. This entry covers Tier 1 ("security/robustness gaps"),
+done immediately after the roadmap was written:
+
+1. **Rate limiting extended beyond login.** `/api/account/signup`,
+   `/api/account/forgot-password`, and `/api/account/reset-password` had
+   no rate limiting at all — added, reusing the existing
+   `lib/rate-limit.ts`. Signup: 8/hour per IP. Forgot-password: 20/15min
+   per IP + 3/15min per email (guards against email-bombing one victim's
+   inbox regardless of source IP; the generic no-enumeration response is
+   unaffected — the 429 only triggers on repeat requests for the *same*
+   email). Reset-password: 10/15min per IP. Covered by new
+   `tests/api/account-security.test.ts` (4 tests).
+2. **Error tracking added (Sentry, `@sentry/nextjs`).** Follows the same
+   "isolated behind an env var, no-op until configured" pattern already
+   used for `lib/payment.ts`/`lib/mail.ts`: `SENTRY_DSN` (server/edge) and
+   `NEXT_PUBLIC_SENTRY_DSN` (browser) are both unset by default, so
+   `Sentry.init()` runs with `enabled: false` and does nothing. Added
+   `sentry.server.config.ts`, `sentry.edge.config.ts`,
+   `instrumentation.ts` (wires both into Next's `register()`/
+   `onRequestError` hooks), `instrumentation-client.ts` (browser init +
+   router-transition instrumentation). All three client/root/store
+   `error.tsx`/`global-error.tsx` boundaries now also call
+   `Sentry.captureException(error)` alongside their existing
+   `console.error` — React error boundaries aren't covered by Next's own
+   server-side `onRequestError` hook, so this needs to be explicit.
+   `next.config.mjs` wraps the config with `withSentryConfig` (source-map
+   upload only activates if `SENTRY_ORG`/`SENTRY_PROJECT`/
+   `SENTRY_AUTH_TOKEN` are set — silently skipped otherwise, doesn't fail
+   the build) and the CSP's `connect-src` now conditionally allows the
+   Sentry ingest origin, parsed from `NEXT_PUBLIC_SENTRY_DSN` at build
+   time, only when that var is set. `npm install @sentry/nextjs` added no
+   new `npm audit` findings beyond the two pre-existing ones from item 11
+   (transitive `postcss`, unreachable `sharp`). Verified: `npm run build`
+   clean, `npm start` boots cleanly with no Sentry warnings, `/api/health`
+   and `/` both 200 with SENTRY_DSN unset (the actual default state until
+   a Sentry project is chosen).
+3. **Added `app/robots.ts` and `app/sitemap.ts`** (Next.js metadata route
+   conventions) — previously zero search-engine signals. Robots disallows
+   `/admin`, `/account`, `/api`, `/cart`, `/checkout` (transactional/
+   private, not content) and allows everything else; sitemap includes the
+   homepage, `/shop`, `/about`, and one entry per non-archived product
+   (`Product.archived: false`), with `lastModified` from
+   `Product.updatedAt`. New `SITE_URL` env var (optional, defaults to
+   `http://localhost:3000`) backs the absolute URLs in both — needs a
+   real value once a production domain is chosen. Verified by booting the
+   server and curling both routes directly; sitemap correctly listed all
+   150 seeded products.
+
+All three verified together: `npm run build` clean, all 37 Vitest tests
+pass (33 prior + 4 new), production server boots and serves `/api/health`,
+`/`, `/robots.txt`, `/sitemap.xml` correctly.
+
+**Not done yet, deliberately**: Tiers 2–4 of `ROADMAP.md` (payment
+processor, email provider, real legal pages, VPS specifics, customer
+reviews, analytics, catalog-fetch scaling, `next/image`, CI) — next up,
+iteratively, per the owner's stated plan.
+
+## Roadmap session, Tier 2 — policy/help pages (2026-08-03)
+
+Tier 2's other items (payment processor, email provider, VPS specifics)
+are all blocked on owner decisions/credentials, so this pass took the one
+unblocked item: the policy/help pages (`ROADMAP.md` Tier 2 #6).
+
+**The gap was bigger than "no legal text".** `components/Footer.tsx`
+listed ten items — Shipping, Returns, Size guide, Contact, Privacy,
+Terms, Journal, Stores, Careers, Accessibility — as plain
+non-clickable `<div>`/`<span>` text. None of them went anywhere and none
+of the pages existed.
+
+**Six real pages added** under `app/(store)`, all server components
+(pure prose, no hooks → they prerender statically), sharing a new
+`components/PolicyPage.tsx` shell (`PolicyPage`/`PolicySection`/`P`/
+`Bullets`) so the layout isn't copy-pasted six times:
+
+- `/shipping` — flat $8, free at $75+, 7% tax, US-only. Written straight
+  from the confirmed business rules and `lib/cart-utils.ts`'s actual
+  numbers, so the page and the checkout math can't disagree.
+- `/returns` — 30-day window, unworn/tags-on condition, how to start one.
+- `/privacy` — **grounded in what the code actually does**, not
+  boilerplate: the data listed is exactly what `prisma/schema.prisma`
+  stores (Customer/Address/Order/WishlistItem fields), the cookie section
+  describes the real `gb_customer` HttpOnly JWT from
+  `lib/customer-auth.ts` and its real 30-day maxAge, the password
+  handling matches the real bcrypt hashing, the reset-token expiry
+  matches the real 1-hour TTL, and the "we don't store card numbers"
+  claim is true because nothing in the codebase collects them (verified:
+  no card fields anywhere in the checkout page or the `Order` model).
+  A comment at the top of the file says to keep it that way if the schema
+  or integrations change.
+- `/terms` — orders/pricing/discount codes/accounts/returns/descriptions.
+- `/size-guide` — XS–XL measurement table (the real fixed size range),
+  how to measure, between-sizes guidance.
+- `/contact` — the three support addresses, workshop address, and a
+  pointer to the other pages for the questions they already answer.
+
+**Footer wired up**: the six links now navigate. Journal/Stores/Careers/
+Accessibility were **removed** rather than left as dead text — there are
+no such pages and inventing four more was out of scope; a comment in
+`Footer.tsx` says to re-add each alongside its real page. A Contact link
+was added to the Company column in their place. All six pages were also
+added to `app/sitemap.ts`.
+
+**Verified**: `npm run build` clean, all six prerender as static (`○`),
+all six return 200 with the right `<title>` against a real production
+server. New `tests/e2e/policy-pages.spec.ts` pins down that each page
+renders its `<h1>` inside the store chrome, that the footer links
+actually navigate, and that the four removed items stay gone.
+
+### E2E suite made hermetic (found while verifying the above)
+
+Running the full Playwright suite to verify the new pages, **every test
+in it failed** — including specs that had nothing to do with these
+changes and had passed in the previous session. Worth recording because
+the failure mode is badly misleading.
+
+**Cause, and it wasn't the app**: `app/globals.css` `@import`s the Geist
+font family from `fonts.googleapis.com`, and product images load from
+`images.unsplash.com`. Both are external requests the browser makes on
+essentially every page. When either host is unreachable, the request
+**hangs instead of failing fast**, so the page's `load` event never
+fires, so every `page.goto` sits until the 30s timeout. The whole suite
+goes red at once, which reads exactly like a catastrophic app break — but
+`next dev` was serving `/shipping` in 0.68s the whole time, and a
+production build served every route fine. Confirmed the diagnosis
+directly: `curl https://fonts.googleapis.com/...` from the same machine
+hung until timeout.
+
+**Fix**: `tests/e2e/helpers.ts` now exports a `test` fixture extending
+Playwright's base that aborts every non-localhost request; all seven
+specs import `test`/`expect` from there instead of `@playwright/test`.
+These tests assert on markup and behavior, never on which typeface
+rendered or whether a photo decoded, so nothing is lost — and the suite
+stops depending on two third-party CDNs being up and fast. Full run went
+from "all 23 timing out" to **23 passing in ~34s**.
+
+**One real test bug this surfaced**, in `tests/e2e/shop-pagination.spec.ts`:
+"the shop page's product request is paginated" collected requests via
+`page.on("request")` and asserted only after waiting for the item count
+to render. The app-wide catalog fetch can satisfy that gate by itself, so
+whether the shop's *own* paginated request had fired yet was down to
+incidental page-load timing — previously masked by how slow the external
+images were. Rewritten to arm `page.waitForRequest` before navigating and
+await it directly, which is deterministic. (The feature itself was never
+broken: the two sibling tests that actually drive the pagination controls
+passed throughout, and `/api/products?page=&pageSize=` returns the
+expected envelope.)
+
+### Two pre-existing bugs found while eyeballing the new pages
+
+Both surfaced from actually loading pages in a browser rather than from
+reading code, and both reproduce on `/` and `/about` — pages this pass
+never touched — so neither is a regression. Neither is fixed; both are
+recorded as `ROADMAP.md` Tier 1b items #13/#14.
+
+- **The site is not responsive at all.** At a 390px mobile viewport every
+  page overflows horizontally to *the same* 891px. That the number is
+  identical across pages with totally different content points at the
+  shared chrome (`Header.tsx`/`Footer.tsx`), not at page content — and it
+  confirms the new size-guide table isn't the culprit (its
+  `overflow-x:auto` wrapper works; a page with no table overflows the
+  same amount).
+- **React hydration mismatch on every page**, apparently traced to the
+  search `<input>` in `components/Header.tsx`. **This one was later
+  withdrawn — see "Hydration mismatch: withdrawn" below.**
+
+**Legal review still required — not resolved by this pass.**
+
+## Responsive pass (2026-08-03) — Tier 1b #13
+
+The site had **zero media queries anywhere** (grepped the whole
+codebase) except one existing `.gb-focus:focus-within` rule, and every
+page overflowed horizontally at phone widths. Root-caused to three
+independent bugs, all fixed, all confirmed by actually rendering pages
+in a browser and measuring — not just by reading the CSS:
+
+1. **The header's nav + search row didn't wrap.** Below ~900px the six
+   nav links plus the 210px search box no longer fit in one row; with no
+   `flex-wrap` and no alternate layout, the header just kept going past
+   the viewport edge, dragging every page with it (the header is shared
+   chrome). Fixed: `components/Header.tsx` now hides the desktop nav+
+   search below 900px (`.gb-header-desktop-nav`, new CSS class) and shows
+   a hamburger button (`.gb-header-hamburger`) that opens a slide-down
+   mobile menu (`.gb-mobile-menu-panel`) with the search box and all nav
+   links stacked, full width. Account/cart icons stay visible in the
+   header row at every width. All three classes are defined in
+   `app/globals.css` right after `.gb-focus`, extending the same
+   established pattern (inline styles via `lib/style.ts`'s `s()` can't
+   express media queries, so anything that needs one lives in a small
+   named CSS class instead).
+2. **Bare `fr` grid tracks respect min-content, not available space.**
+   The homepage hero (`grid-template-columns: 1.04fr .96fr`) squeezed its
+   image column to 81px wide (and pushed it 78px past a 390px viewport)
+   because the text column's 60px heading has a min-content width wider
+   than its "fair share" of a narrow viewport — a bare `fr` track's
+   *minimum* size defaults to its content's min-content, not zero. This
+   pattern existed in every multi-column grid across the storefront:
+   homepage (hero, 3 tile categories, 4-col new-arrivals, 2-col banner),
+   product detail (2-col top section, 4-col related items), about
+   (3-col stats, 2-col story), cart/checkout (content + fixed-340px
+   summary sidebar, plus 2-and 3-col address field rows), shop (fixed
+   218px filter sidebar + product grid), account (2-col form rows,
+   4-col wishlist). Fixed uniformly: nine new CSS classes in
+   `globals.css` (`.gb-split-104`, `.gb-split-11`, `.gb-split-even`,
+   `.gb-sidebar-340`, `.gb-sidebar-218`, `.gb-cols-3`, `.gb-cols-4`,
+   `.gb-row-2`, `.gb-row-3`) replace every bare-`fr`
+   `grid-template-columns` inline value across those components with
+   `minmax(0, …fr)` tracks (floors the minimum at 0 so a track can
+   actually shrink) plus real mobile breakpoints that stack to fewer
+   columns (760px for the 2-column split layouts, 860px for the
+   fixed-sidebar layouts, 620px for 3/4-up product grids → 2-up, 480px
+   for 2/3-up form-field rows → 1-up). The breakpoints themselves were
+   picked empirically (swept 1280→320px on the built app and used the
+   width each layout actually started breaking at), not guessed.
+   **Non-obvious pitfall hit twice while fixing this**: the *media-query
+   override* itself must also use `minmax(0, 1fr)`, not a bare `1fr` —
+   a single bare-`fr` track still respects min-content, so an early
+   version of this fix still overflowed by exactly the width of the
+   squeezed content, just at the new breakpoint instead of the old one.
+   Confirmed fixed by re-testing after correcting all four override
+   blocks.
+3. **Large headings didn't shrink at all, independent of the grid fix.**
+   Even in a single stacked column, a `font-size: 60px` heading whose
+   longest single word doesn't fit a ~264px-wide mobile column will
+   overflow — no grid or flex fix helps here, since a word can't be
+   split. Found via a `Range.getClientRects()` text-node scan (regular
+   element-rect scanning missed this entirely, since the *containing*
+   `<h1>`'s own box wasn't widened — only the unbreakable text inside it
+   painted past its edge). Fixed by converting every heading ≥36px in
+   customer-facing components to `font-size: clamp(min, Nvw, max)`:
+   homepage hero (`clamp(34px,8vw,60px)`) and banner
+   (`clamp(26px,7vw,36px)`), about page hero (`clamp(30px,9vw,50px)`),
+   product detail title (`clamp(24px,7vw,36px)`), and the shared
+   `PolicyPage` shell's `<h1>` (`clamp(28px,8vw,42px)`, used by all six
+   policy pages). `clamp()` is a plain CSS value — no media query needed,
+   and `lib/style.ts`'s `s()` parser passes it through untouched (only
+   splits on `;` and the first `:`, so the commas inside `clamp(...)`
+   are safe).
+
+**Verification**: wrote a throwaway Playwright script that swept every
+customer-facing route (`/`, `/about`, `/shop`, `/product/:id`, `/cart`,
+`/checkout`, and all six policy pages) across eleven viewport widths from
+320px to 1280px, checking both `document.documentElement.scrollWidth`
+*and* a `Range`-based text-node scan (to catch the clamp-worthy
+heading-overflow case that element-level checks miss) — zero overflow
+anywhere, confirmed twice (once after the grid fix, again after the
+heading fix, since the first pass still had two failures at 320px that
+the second pass resolved). Also visually confirmed via screenshots at
+390px (mobile menu closed and open) and 1280px (desktop, to confirm zero
+visual regression) — desktop layout is pixel-identical to before this
+pass. Full regression coverage kept permanently in
+`tests/e2e/mobile-responsive.spec.ts`: zero-overflow checks at 375px/320px
+on the homepage and at 320px on checkout (the deepest nested grid-within-
+grid layout in the app), plus a test that the desktop nav is hidden and
+the hamburger menu opens, shows the search box and all nav links, and
+navigating through it closes the menu and lands on the right URL.
+
+**Not touched by this pass**: the hydration mismatch (Tier 1b #14, since
+withdrawn — see below) and the admin panel (`app/admin/page.tsx`) —
+admin is a desk tool for the store owner, not customer-facing, so it was
+deliberately out of scope here despite having the same bare-`fr` grid
+pattern in several places.
+
+## Customer reviews (2026-08-03) — Tier 3 #8
+
+`Product.rating` / `Product.reviews` were static made-up numbers from the
+seed generator (`lib/catalog.ts`: `(4.2 + rnd() * 0.7).toFixed(1)` and
+`6 + floor(rnd() * 240)`) with no way for anyone to actually submit one.
+Now a real feature end to end.
+
+**Schema** (migration `20260803140110_add_product_reviews`): new `Review`
+model — `productId`, `customerId`, `rating` (Int 1-5), `title`, `body`,
+`verified`, timestamps — with `@@unique([productId, customerId])` so one
+customer gets one review per product (re-submitting edits in place rather
+than stacking duplicates) and `@@index([productId])` for the list query.
+The relation on `Product` is named `reviewList`, not `reviews`, because
+`reviews` was already taken by the count column.
+
+**`rating`/`reviews` are now maintained aggregates**, deliberately kept
+denormalized on `Product` in exactly the same spirit as `Product.stock`
+over `variants` — product grids shouldn't have to join and count reviews
+per card. They're recomputed by `recomputeAggregates()` **inside the same
+transaction** as every review write/delete, so the aggregate can't drift
+from the rows it summarizes. `rating` stays a `String` ("4.0") because
+that's the shape the storefront and CSV export already consume.
+
+**The seeded placeholder numbers get replaced on a product's first real
+review.** That's intentional: blending invented review counts with real
+customer ratings would misrepresent both. The visible consequence is that
+a product can now honestly have zero reviews, so the PDP shows
+"No reviews yet" instead of a nonsensical "★ 0 (0)" — worth knowing,
+since it means the catalog's impressive-looking seeded rating/count
+numbers are placeholder marketing data that will decay away as real
+reviews arrive.
+
+**API** — `app/api/products/[id]/reviews/route.ts`:
+- `GET` is public, returns up to 100 newest reviews with the author's
+  name, and flags the caller's own review via a `mine` boolean so the UI
+  can offer "Edit your review" instead of a blank form.
+- `POST` requires a customer session, validates the rating is a whole
+  1-5 (rejects `0`, `6`, `2.5`, `"five"`), clamps title/body length,
+  404s on unknown or archived products, and upserts.
+- `DELETE` scopes by `customerId`, so one customer can never delete
+  another's review; uses `deleteMany` so deleting a nonexistent review is
+  a no-op rather than a throw.
+- Rate limited via the existing `lib/rate-limit.ts` (20/hr per IP,
+  10/hr per customer) — review spam is exactly the abuse case that
+  motivated adding that module.
+
+**"Verified purchase"** is computed at write time by checking for an
+`OrderItem` for this product on an order belonging to this customer, then
+**stored** on the row rather than derived on read — so the badge can't
+change retroactively if order history is ever edited.
+
+**UI** — `components/ProductReviews.tsx` on the PDP: star display, an
+accessible 1-5 star picker (`role="radiogroup"`/`radio`, proper
+`aria-label`s), optional title/body, verified badge, per-review dates,
+loading/error/empty states with retry, and edit/delete for your own
+review. Signed-out visitors can read reviews; clicking "Write a review"
+sends them to sign-in. After a write it calls `reloadCatalog()` so the
+header stars and every product card pick up the new aggregate without a
+page reload. The PDP's rating also now links down to `#reviews`.
+
+Wired one more dead link found along the way: the PDP's "Size guide" was
+a non-clickable `<span>` — now navigates to the `/size-guide` page added
+in the Tier 2 pass.
+
+**Tests**: `tests/api/reviews.test.ts` (9 integration tests — auth
+required, rating validation, aggregate recompute, multi-review averaging,
+upsert-not-duplicate, verified-purchase true *and* false, cross-customer
+delete isolation, public list with `mine` flag, 404) and
+`tests/e2e/product-reviews.spec.ts` (2 — signed-out redirect, plus a full
+write → edit → delete round trip asserting the denormalized header rating
+tracks each step). Also verified by hand in a browser at 1280px and
+390px, including confirming the reviews section adds no mobile overflow.
+
+**Test-data note**: the e2e spec signs up a throwaway customer against
+the **dev** database and ends by deleting its review, which recomputes
+product 1 to `reviews: 0, rating: "0"` — it does *not* restore the
+seeded `4.3`/`11`. Harmless (those numbers were always fake), but that's
+why product 1 may read "No reviews yet" after an e2e run. To restore
+seeded values for a specific product, they're deterministic:
+`npx tsx -e "import {buildCatalog} from './lib/catalog'; console.log(buildCatalog().find(p=>p.id===1))"`.
+The manual browser-verification data created during this pass was cleaned
+out and product 1 restored to `4.3`/`11`; dev DB is back to
+150 products / 0 reviews / 0 customers.
+
+**Not built in the first pass** — most of this was built immediately
+after, see "Reviews, round two" below. Photo uploads remain the one
+conscious deferral.
+
+## Reviews, round two (2026-08-03)
+
+Everything flagged as out of scope in the first reviews pass, except
+photo uploads.
+
+### Admin moderation
+
+A public review system with no moderation path is a spam/abuse liability,
+so this was the priority of the three. New "Reviews" item in the admin
+nav backed by:
+- `GET /api/reviews` — admin-only, spans every product (distinct from the
+  public per-product list), with search across review text / author name
+  / author email / product name, a rating filter, and pagination. It
+  exposes the reviewer's **email**, which the public endpoint
+  deliberately does not, so abuse can be traced to an account.
+- `DELETE /api/reviews/[id]` — removes any review regardless of author,
+  vs. the customer-facing delete which is always scoped to the caller's
+  own row.
+- `GET /api/reviews/export` — CSV of every review (product SKU/name,
+  author, email, rating, verified, helpful count, title, body, date).
+  **Export only, deliberately no import counterpart**: reviews are
+  first-party statements attributed to a real account, and bulk-loading
+  them from a spreadsheet would make both the author attribution and the
+  "Verified purchase" badge meaningless.
+
+`recomputeAggregates` moved out of the route and into
+`lib/review-aggregates.ts` as `recomputeReviewAggregates()` — with two
+routes now deleting reviews, having two copies of "what the rating means"
+was a drift risk rather than a hypothetical.
+
+### Rating histogram
+
+The public review list response now also carries `total`, `average`, and
+a 1-5 `distribution`, computed with a `groupBy` over **all** of a
+product's reviews rather than the 100 rows the list itself is capped at —
+so the histogram stays accurate past that cap. The PDP renders the
+average, star row, and a proportional bar per rating (each bar carries an
+`aria-label` with the count and percentage, since the bar itself is
+decorative).
+
+### Helpfulness voting
+
+New `ReviewVote` model (migration `20260803145554_add_review_helpful_votes`)
+with `@@unique([reviewId, customerId])` and `onDelete: Cascade`, plus a
+`Review.helpful` count maintained the same way `Product.reviews` is —
+recounted inside the vote transaction rather than incremented, so it
+can't drift.
+
+- `POST /api/reviews/[id]/helpful` **toggles** rather than exposing
+  separate add/remove verbs: the UI is one button whose meaning depends
+  on current state, and a single call means client and server can't
+  disagree about whether a vote already exists.
+- Voting on your own review is a 400, and the UI doesn't render a button
+  there at all — it shows the count (or "Your review") instead of a
+  control that could only ever error.
+- Reviews now sort **most-helpful first, newest as tiebreak**, so the
+  first thing a shopper reads is what other shoppers found useful.
+- The list response includes `helpful` and `votedByMe`; the caller's own
+  votes come back in the same round trip (a conditional `include` on the
+  votes relation) rather than a second request.
+- The button updates optimistically and **rolls back on failure** with a
+  toast — a vote is trivially reversible, so instant feedback is worth
+  it, but silently keeping a wrong count is not.
+
+### Testing and verification
+
+`tests/api/review-votes.test.ts` (8) covers toggle on/off, repeat votes
+counting once (never 3), self-vote rejection, 404, `votedByMe` for anon
+vs. voter, most-helpful-first ordering, and cascade deletion of votes with
+their review. `tests/api/reviews.test.ts` gained a distribution/average
+test. `tests/e2e/product-reviews.spec.ts` gained a two-browser-context
+test (two real shoppers) covering the histogram numbers, one-button-not-
+two, persistence across reload, and toggling back off. Admin moderation
+was verified by hand in a browser end to end: seeding real reviews
+through the storefront, then filtering by rating, searching by
+text/product/email, deleting, and confirming the product's rating
+recomputed (2 reviews → 1, rating → 5.0), plus a 401 check on the
+unauthenticated admin endpoint.
+
+**Two things worth recording from this pass:**
+
+1. **A stale dev server cost real time again.** `next dev` had been
+   started *before* `prisma generate` ran for the new `helpful` column,
+   so it held an old Prisma client in memory and every review fetch 500'd
+   with "Unknown argument `helpful`" — while `tsc` was perfectly clean,
+   because the regenerated client was already on disk. After a schema
+   change, restart the dev server; a green typecheck says nothing about
+   what a long-running process has loaded. (Same class of problem as the
+   withdrawn "hydration mismatch" above.)
+2. **The new e2e test was polluting itself.** It asserts on whole-product
+   aggregates ("2 reviews", "3.5 average"), so a leftover review from an
+   earlier failed run silently changed those numbers and made the failure
+   look like a product bug — and because it only cleaned up on the happy
+   path, each failure made the next run worse. Fixed by resetting the
+   test product's reviews at the *start* of the test, not just the end.
+   That reset goes through the admin HTTP API rather than Prisma: the
+   Playwright runner can't load the generated ESM client (confirmed by
+   trying — it fails with "Cannot use 'import.meta' outside a module"),
+   and going through the real endpoints means the reset exercises the
+   admin delete path instead of reaching around it.
+   `playwright.config.ts` now loads `.env` so the test process itself has
+   `DATABASE_URL`.
+
+### Still not built: review photos
+
+The one item from the original list left undone, and deliberately so
+rather than by omission. Accepting customer-uploaded images on a public
+storefront is a materially different commitment from the rest of this
+feature: it needs upload authz separate from the existing admin-only
+`/api/upload`, real MIME/size/dimension validation, a storage and backup
+story on the VPS (the current `public/uploads` directory is not one), and
+— the actual blocker — a policy for illegal or abusive image content,
+which is a legal question for the owner rather than an engineering one.
+Worth doing, but as its own scoped piece of work with the owner's input,
+not folded into a review-polish pass. The admin moderation added above is
+a prerequisite either way.
+
+## Hydration mismatch: withdrawn, was not a real bug (2026-08-03)
+
+Tier 1b #14 claimed React logged a server/client hydration mismatch on
+every page, "traced to the search `<input>` in `components/Header.tsx`".
+On investigation **it does not reproduce and the diagnosis was wrong.**
+Recorded in full because the reasoning is the reusable part:
+
+- It reproduces on **no** route — checked `/`, `/about`, `/shop`,
+  `/product/:id`, `/cart`, `/checkout`, `/shipping`, `/privacy`,
+  `/account/login`, `/admin`, at both 1280px and 390px (the mobile
+  viewport matters here, since the header renders a genuinely different
+  tree there after the responsive pass).
+- It's not fixed-by-accident from the responsive pass either. Tested
+  directly by restoring `git show HEAD:components/Header.tsx` over the
+  working copy and re-running the same sweep: **the original header is
+  also clean.** (The working copy was backed up to two locations first
+  and byte-compared with `diff` after restoring — the point of the test
+  was to rule the header in or out, not to keep the old file.)
+- Clean on a **production build** too (`node .next/standalone/server.js`),
+  not just `next dev`, which is the case that would actually matter.
+
+The original sighting came from one screenshot run against a `next dev`
+server that had been running a long time and had earlier wedged badly
+enough that `curl` hung on it (that same hung server is what caused the
+mass e2e timeouts documented above). Stale dev-server/HMR state is by far
+the likeliest explanation — and note React's own hydration warning text
+explicitly lists causes it *can't* distinguish, so "the error names the
+`<input>`" was never strong evidence that the `<input>` was at fault; the
+tree dump shows the path to the mismatch, not necessarily the culprit.
+
+**Lesson worth keeping**: a symptom seen once, on a dev server already
+known to be in a bad state, isn't a bug report yet. The check that
+settled it (fresh server + production build + reverting the suspected
+file) costs a few minutes and is worth doing before logging a defect —
+or before "fixing" something that was never broken. The
+Privacy and Terms pages are accurate descriptions of what the software
+does, which is a much better starting point than generic boilerplate,
+but they have **not been reviewed by a lawyer** and jurisdiction-specific
+obligations (GDPR/CCPA disclosures, statutory consumer-rights wording,
+etc.) have not been assessed. `ROADMAP.md` Tier 2 #6 stays open for that
+reason. Support email addresses across all six pages are
+`@graybridge.example` placeholders and need swapping for real,
+monitored inboxes before launch.

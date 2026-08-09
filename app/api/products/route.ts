@@ -100,13 +100,17 @@ export async function POST(req: NextRequest) {
   const variants = parseVariants(body);
   const stock = variants ? variants.reduce((n, v) => n + v.stock, 0) : Number(body.stock) || 0;
 
+  const images = Array.isArray(body.images) ? body.images.filter((x: unknown): x is string => typeof x === "string") : null;
+  const imgId = images?.length ? images[0] : typeof body.imgId === "string" ? body.imgId : "";
+
   const created = await prisma.product.create({
     data: {
       name,
       cat,
       price: Number(body.price) || 0,
       wasPrice: body.wasPrice != null ? Number(body.wasPrice) : null,
-      imgId: typeof body.imgId === "string" ? body.imgId : "",
+      imgId,
+      images: JSON.stringify(images?.length ? images : imgId ? [imgId] : []),
       colors: JSON.stringify(Array.isArray(body.colors) ? body.colors : []),
       tags: JSON.stringify(Array.isArray(body.tags) ? body.tags : []),
       rating: typeof body.rating === "string" ? body.rating : "4.6",

@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { notFound, useParams, useRouter } from "next/navigation";
-import { badgeOf, cats, desc, img, SIZES, swatchHex } from "@/lib/catalog";
+import { badgeOf, desc, img, SIZES, swatchHex } from "@/lib/catalog";
 import { useStore } from "@/lib/store";
 import { s } from "@/lib/style";
 import { Hv } from "@/components/Hover";
 import { ProductCard } from "@/components/ProductCard";
+import { ProductReviews } from "@/components/ProductReviews";
 
 export default function ProductPage() {
   const router = useRouter();
@@ -48,9 +50,7 @@ export default function ProductPage() {
     notFound();
   }
 
-  const pool = (cats[p.cat] || cats["T-Shirts"]).ids;
-  const gallery = [p.imgId].concat(pool.filter((x) => x !== p.imgId)).slice(0, 3);
-  while (gallery.length < 3) gallery.push(p.imgId);
+  const gallery = p.images?.length ? p.images : [p.imgId];
 
   const badge = badgeOf(p);
   const selectedColor = p.colors[colorIdx] || p.colors[0];
@@ -72,27 +72,38 @@ export default function ProductPage() {
         / <span style={s("color:#1a1714")}>{p.name}</span>
       </div>
 
-      <div style={s("display:grid;grid-template-columns:1.1fr .9fr;gap:48px;align-items:start")}>
+      <div className="gb-split-11" style={s("display:grid;gap:48px;align-items:start")}>
         <div style={s("display:flex;gap:14px;animation:gbScale .6s both")}>
-          <div style={s("display:flex;flex-direction:column;gap:10px;width:78px;flex-shrink:0")}>
-            {gallery.map((g, i) => (
-              <div
-                key={i}
-                onClick={() => setImgIdx(i)}
-                style={s(
-                  `aspect-ratio:4/5;border-radius:10px;overflow:hidden;cursor:pointer;border:2px solid ${
-                    imgIdx === i ? "#1a1714" : "transparent"
-                  }`,
-                )}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={img(g, 200)} alt="" style={s("width:100%;height:100%;object-fit:cover")} />
-              </div>
-            ))}
-          </div>
-          <div style={s("flex:1;aspect-ratio:4/5;border-radius:18px;overflow:hidden;background:#f1ece2;border:1px solid #ece7df")}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={img(gallery[imgIdx] || gallery[0], 900)} alt={p.name} style={s("width:100%;height:100%;object-fit:cover")} />
+          {gallery.length > 1 ? (
+            <div style={s("display:flex;flex-direction:column;gap:10px;width:78px;flex-shrink:0")}>
+              {gallery.map((g, i) => (
+                <div
+                  key={i}
+                  onClick={() => setImgIdx(i)}
+                  style={s(
+                    `position:relative;aspect-ratio:4/5;border-radius:10px;overflow:hidden;cursor:pointer;border:2px solid ${
+                      imgIdx === i ? "#1a1714" : "transparent"
+                    }`,
+                  )}
+                >
+                  <Image src={img(g, 200)} alt="" fill sizes="78px" style={s("object-fit:cover")} />
+                </div>
+              ))}
+            </div>
+          ) : null}
+          <div
+            style={s(
+              "position:relative;flex:1;aspect-ratio:4/5;border-radius:18px;overflow:hidden;background:#f1ece2;border:1px solid #ece7df",
+            )}
+          >
+            <Image
+              src={img(gallery[imgIdx] || gallery[0], 900)}
+              alt={p.name}
+              fill
+              sizes="(max-width: 760px) 100vw, 500px"
+              priority
+              style={s("object-fit:cover")}
+            />
           </div>
         </div>
 
@@ -111,7 +122,7 @@ export default function ProductPage() {
               </span>
             ) : null}
           </div>
-          <h1 style={s("font-size:36px;font-weight:600;letter-spacing:-.025em;margin:0;line-height:1.08")}>{p.name}</h1>
+          <h1 style={s("font-size:clamp(24px,7vw,36px);font-weight:600;letter-spacing:-.025em;margin:0;line-height:1.08")}>{p.name}</h1>
           <div style={s("display:flex;align-items:center;gap:14px")}>
             <div style={s("display:flex;align-items:baseline;gap:10px")}>
               <span style={s("font:500 24px 'Geist Mono',monospace")}>${p.price}</span>
@@ -122,9 +133,21 @@ export default function ProductPage() {
               ) : null}
             </div>
             <span style={s("color:#d6cfc2")}>|</span>
-            <span style={s("font-size:13.5px;color:#6b6459")}>
-              ★ {p.rating} <span style={s("color:#9a948a")}>({p.reviews})</span>
-            </span>
+            {/* A product with no reviews shows a prompt rather than
+                "★ 0 (0)" — real review counts can now legitimately be
+                zero (see components/ProductReviews.tsx). */}
+            <a
+              href="#reviews"
+              style={s("font-size:13.5px;color:#6b6459;text-decoration:none;cursor:pointer")}
+            >
+              {p.reviews > 0 ? (
+                <>
+                  ★ {p.rating} <span style={s("color:#9a948a")}>({p.reviews})</span>
+                </>
+              ) : (
+                <span style={s("color:#9a948a")}>No reviews yet</span>
+              )}
+            </a>
           </div>
           <p style={s("font-size:15.5px;line-height:1.65;color:#5f5a52;margin:0;max-width:460px")}>{desc(p)}</p>
 
@@ -151,7 +174,12 @@ export default function ProductPage() {
           <div style={s("display:flex;flex-direction:column;gap:11px")}>
             <div style={s("display:flex;justify-content:space-between")}>
               <span style={s("font-size:13px;font-weight:500")}>Size</span>
-              <span style={s("font-size:12.5px;color:#c2410c;cursor:pointer")}>Size guide</span>
+              <span
+                onClick={() => router.push("/size-guide")}
+                style={s("font-size:12.5px;color:#c2410c;cursor:pointer")}
+              >
+                Size guide
+              </span>
             </div>
             <div style={s("display:flex;gap:9px")}>
               {SIZES.map((sz) => {
@@ -243,9 +271,11 @@ export default function ProductPage() {
         </div>
       </div>
 
+      <ProductReviews productId={p.id} />
+
       <section style={s("margin-top:64px")}>
         <h2 style={s("font-size:24px;font-weight:600;letter-spacing:-.02em;margin:0 0 24px")}>You might also like</h2>
-        <div style={s("display:grid;grid-template-columns:repeat(4,1fr);gap:22px")}>
+        <div className="gb-cols-4" style={s("display:grid;gap:22px")}>
           {related.map((r, i) => (
             <ProductCard key={r.id} p={r} i={i} />
           ))}

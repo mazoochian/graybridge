@@ -2,10 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { CUSTOMER_SESSION_COOKIE, signCustomerSession } from "@/lib/customer-auth";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+function rateLimited(retryAfterSeconds: number) {
+  return NextResponse.json(
+    { error: "Too many signup attempts. Please try again later." },
+    { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } },
+  );
+}
+
 export async function POST(req: NextRequest) {
+  const ip = getClientIp(req);
+  const ipLimit = checkRateLimit(`signup:ip:${ip}`, { max: 8, windowMs: 60 * 60 * 1000 });
+  if (!ipLimit.allowed) return rateLimited(ipLimit.retryAfterSeconds);
+
   const body = await req.json().catch(() => null);
   const name = typeof body?.name === "string" ? body.name.trim() : "";
   const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";

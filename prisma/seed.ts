@@ -23,6 +23,7 @@ async function seedProducts() {
       price: p.price,
       wasPrice: p.wasPrice,
       imgId: p.imgId,
+      images: JSON.stringify(p.images),
       colors: JSON.stringify(p.colors),
       tags: JSON.stringify(p.tags),
       rating: p.rating,

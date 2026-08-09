@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import * as Sentry from "@sentry/nextjs";
 import { s } from "@/lib/style";
 import { Hv } from "@/components/Hover";
 
@@ -10,6 +11,7 @@ export default function StoreError({ error, reset }: { error: Error & { digest?:
 
   useEffect(() => {
     console.error("[store error boundary]", error);
+    Sentry.captureException(error);
   }, [error]);
 
   return (

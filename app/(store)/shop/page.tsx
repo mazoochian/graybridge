@@ -35,6 +35,23 @@ function ShopInner() {
   // doesn't need its own paginated request.
   const catCount = (c: string) => catalog.filter((p) => p.cat === c).length;
 
+  // Re-sync filter state from the URL whenever it changes out from under
+  // us. filterCat/filterTags/search are only ever *initialized* from
+  // `params` above, so a link that pushes a new /shop?cat=... URL while
+  // this page is already mounted (e.g. the header's category links, or
+  // the "New" tag link) doesn't remount ShopInner — Next.js reuses the
+  // existing instance for the same route — so without this, the URL
+  // updates but the grid keeps showing the previous category/tag/search
+  // results, and clicking a card navigates to the wrong product.
+  useEffect(() => {
+    setFilterCat(params.get("cat") || "All");
+    setFilterTags(params.get("tag") ? [params.get("tag") as string] : []);
+    const q = params.get("q") || "";
+    setSearchInput(q);
+    setSearch(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
+
   // Debounce free-text search so it doesn't refetch on every keystroke.
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput.trim()), 350);
@@ -118,7 +135,7 @@ function ShopInner() {
         </div>
       </div>
 
-      <div style={s("display:grid;grid-template-columns:218px 1fr;gap:34px;align-items:start")}>
+      <div className="gb-sidebar-218" style={s("display:grid;gap:34px;align-items:start")}>
         <aside style={s("position:sticky;top:90px;display:flex;flex-direction:column;gap:28px;animation:gbFade .5s both")}>
           <div>
             <div
@@ -212,7 +229,7 @@ function ShopInner() {
             </div>
           ) : (
             <>
-              <div style={s(`display:grid;grid-template-columns:repeat(3,1fr);gap:22px;${loading ? "opacity:.5" : ""}`)}>
+              <div className="gb-cols-3" style={s(`display:grid;gap:22px;${loading ? "opacity:.5" : ""}`)}>
                 {list.map((p, i) => (
                   <ProductCard key={p.id} p={p} i={i} showAdd showBadge showCat showWas />
                 ))}

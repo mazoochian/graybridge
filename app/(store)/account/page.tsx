@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { img } from "@/lib/catalog";
 import { useStore } from "@/lib/store";
@@ -235,11 +236,11 @@ export default function AccountPage() {
               <input placeholder="Label (Home, Work…)" value={newAddress.label} onChange={(e) => setNewAddress((f) => ({ ...f, label: e.target.value }))} style={s(FIELD_STYLE)} />
               <input placeholder="Address line 1" value={newAddress.addressLine1} onChange={(e) => setNewAddress((f) => ({ ...f, addressLine1: e.target.value }))} style={s(FIELD_STYLE)} />
               <input placeholder="Address line 2 (optional)" value={newAddress.addressLine2} onChange={(e) => setNewAddress((f) => ({ ...f, addressLine2: e.target.value }))} style={s(FIELD_STYLE)} />
-              <div style={s("display:grid;grid-template-columns:1fr 1fr;gap:10px")}>
+              <div className="gb-row-2" style={s("display:grid;gap:10px")}>
                 <input placeholder="City" value={newAddress.city} onChange={(e) => setNewAddress((f) => ({ ...f, city: e.target.value }))} style={s(FIELD_STYLE)} />
                 <input placeholder="State / region" value={newAddress.region} onChange={(e) => setNewAddress((f) => ({ ...f, region: e.target.value }))} style={s(FIELD_STYLE)} />
               </div>
-              <div style={s("display:grid;grid-template-columns:1fr 1fr;gap:10px")}>
+              <div className="gb-row-2" style={s("display:grid;gap:10px")}>
                 <input placeholder="Postal code" value={newAddress.postalCode} onChange={(e) => setNewAddress((f) => ({ ...f, postalCode: e.target.value }))} style={s(FIELD_STYLE)} />
                 <input placeholder="Country" value={newAddress.country} onChange={(e) => setNewAddress((f) => ({ ...f, country: e.target.value }))} style={s(FIELD_STYLE)} />
               </div>
@@ -261,7 +262,7 @@ export default function AccountPage() {
       ) : null}
 
       {!loading && !loadError && tab === "wishlist" ? (
-        <div style={s("display:grid;grid-template-columns:repeat(4,1fr);gap:18px")}>
+        <div className="gb-cols-4" style={s("display:grid;gap:18px")}>
           {wishlist.length === 0 ? (
             <div style={s("color:#8a8275;font-size:13.5px;grid-column:1/-1")}>No saved items yet.</div>
           ) : (
@@ -270,10 +271,17 @@ export default function AccountPage() {
                 <div key={w.productId} style={s("display:flex;flex-direction:column;gap:8px")}>
                   <div
                     onClick={() => router.push(`/product/${w.productId}`)}
-                    style={s("aspect-ratio:4/5;background:#f1ece2;border-radius:12px;overflow:hidden;cursor:pointer")}
+                    style={s(
+                      "position:relative;aspect-ratio:4/5;background:#f1ece2;border-radius:12px;overflow:hidden;cursor:pointer",
+                    )}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={img(w.product.imgId, 400)} alt={w.product.name} style={s("width:100%;height:100%;object-fit:cover")} />
+                    <Image
+                      src={img(w.product.imgId, 400)}
+                      alt={w.product.name}
+                      fill
+                      sizes="(max-width: 620px) 50vw, 25vw"
+                      style={s("object-fit:cover")}
+                    />
                   </div>
                   <div style={s("display:flex;justify-content:space-between;font-size:13px")}>
                     <span>{w.product.name}</span>

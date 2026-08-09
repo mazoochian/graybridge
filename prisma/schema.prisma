@@ -19,8 +19,16 @@ model Product {
   price     Int
   wasPrice  Int?
   imgId     String
+  images    String   @default("[]") // JSON-encoded string[]; images[0] is the cover, kept in sync with imgId
   colors    String // JSON-encoded string[]
   tags      String // JSON-encoded string[]
+  // rating/reviews are maintained aggregates over `reviewList`, the same
+  // way `stock` below is a maintained aggregate over `variants` — kept
+  // denormalized so product grids don't need to join/count reviews per
+  // card. Both are recomputed inside the same transaction as any review
+  // write (see app/api/products/[id]/reviews/route.ts). rating is a
+  // String ("4.6") rather than a Float because that's the shape the
+  // storefront and CSV export already expect.
   rating    String
   reviews   Int      @default(0)
   stock     Int      @default(0) // maintained aggregate = sum(variants.stock)
@@ -33,8 +41,50 @@ model Product {
   // so a hard delete would corrupt order history.
   archived  Boolean  @default(false)
   variants  ProductVariant[]
+  // Named reviewList, not reviews, because `reviews` above is already
+  // taken by the denormalized count.
+  reviewList Review[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model Review {
+  id         Int      @id @default(autoincrement())
+  product    Product  @relation(fields: [productId], references: [id])
+  productId  Int
+  customer   Customer @relation(fields: [customerId], references: [id])
+  customerId Int
+  rating     Int // 1-5, validated at the API boundary
+  title      String   @default("")
+  body       String   @default("")
+  // Whether this customer had actually ordered this product at the time
+  // they reviewed it. Stored rather than derived so the badge doesn't
+  // change retroactively if order history is ever edited.
+  verified   Boolean  @default(false)
+  // Maintained aggregate over `votes`, same pattern as Product.reviews —
+  // kept denormalized so listing reviews doesn't need a count per row,
+  // and recomputed in the same transaction as any vote change.
+  helpful    Int      @default(0)
+  votes      ReviewVote[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // One review per customer per product; re-submitting edits in place.
+  @@unique([productId, customerId])
+  @@index([productId])
+}
+
+model ReviewVote {
+  id         Int      @id @default(autoincrement())
+  review     Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  reviewId   Int
+  customer   Customer @relation(fields: [customerId], references: [id])
+  customerId Int
+  createdAt  DateTime @default(now())
+
+  // One vote per customer per review; voting again removes it (toggle).
+  @@unique([reviewId, customerId])
+  @@index([reviewId])
 }
 
 model ProductVariant {
@@ -107,6 +157,8 @@ model Customer {
   wishlist     WishlistItem[]
   orders       Order[]
   resetTokens  PasswordResetToken[]
+  reviews      Review[]
+  reviewVotes  ReviewVote[]
   createdAt    DateTime           @default(now())
 }
 

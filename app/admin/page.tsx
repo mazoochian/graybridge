@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { catOptions, cats, desc, img, SIZES, type Product } from "@/lib/catalog";
 import { useStore } from "@/lib/store";
 import { s } from "@/lib/style";
 import { Hv } from "@/components/Hover";
 
-type AdminView = "products" | "add" | "orders" | "discounts" | "admins";
+type AdminView = "products" | "add" | "orders" | "reviews" | "discounts" | "admins";
 type VariantCell = { color: string; size: string; stock: string };
 
 interface Form {
@@ -17,9 +18,9 @@ interface Form {
   colors: string;
   tags: string;
   desc: string;
-  imgId: string;
+  images: string[];
 }
-const blankForm = (): Form => ({ name: "", cat: "T-Shirts", price: "", colors: "Ecru, Black", tags: "", desc: "", imgId: "" });
+const blankForm = (): Form => ({ name: "", cat: "T-Shirts", price: "", colors: "Ecru, Black", tags: "", desc: "", images: [] });
 
 function reconcileVariants(colorsCsv: string, existing: VariantCell[]): VariantCell[] {
   const colors = colorsCsv.split(",").map((c) => c.trim()).filter(Boolean);
@@ -37,8 +38,22 @@ const NAV: [AdminView, string][] = [
   ["products", "Products"],
   ["add", "Add product"],
   ["orders", "Orders"],
+  ["reviews", "Reviews"],
   ["discounts", "Discounts"],
 ];
+
+interface AdminReview {
+  id: number;
+  productId: number;
+  productName: string;
+  author: string;
+  email: string;
+  rating: number;
+  title: string;
+  body: string;
+  verified: boolean;
+  createdAt: string;
+}
 
 interface DiscountCode {
   id: number;
@@ -92,6 +107,7 @@ const shortDate = (iso: string) => new Date(iso).toLocaleDateString("en-US", { m
 
 const GRID = "56px 2.2fr 1fr 1fr 1.2fr .9fr 120px";
 const ORDER_GRID = "1fr 1.4fr .6fr .8fr 1fr 1.4fr .9fr";
+const REVIEW_GRID = "1.4fr 1fr .7fr 2fr .8fr .5fr";
 
 export default function AdminPage() {
   const router = useRouter();
@@ -114,10 +130,32 @@ export default function AdminPage() {
   const [importBusy, setImportBusy] = useState(false);
   const [adminUsername, setAdminUsername] = useState("");
   const [adminRole, setAdminRole] = useState("staff");
+  const [reviews, setReviews] = useState<AdminReview[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewsError, setReviewsError] = useState(false);
+  const [reviewSearchInput, setReviewSearchInput] = useState("");
+  const [reviewSearch, setReviewSearch] = useState("");
+  const [reviewRatingFilter, setReviewRatingFilter] = useState("");
+  const [reviewPage, setReviewPage] = useState(1);
+  const [reviewTotal, setReviewTotal] = useState(0);
+  const [reviewTotalPages, setReviewTotalPages] = useState(1);
 
   const setColors = (raw: string) => {
     setForm((f) => ({ ...f, colors: raw }));
     setVariantGrid((prev) => reconcileVariants(raw, prev));
+  };
+
+  const removeImage = (i: number) => {
+    setForm((f) => ({ ...f, images: f.images.filter((_, idx) => idx !== i) }));
+  };
+
+  const setCoverImage = (i: number) => {
+    setForm((f) => {
+      const images = [...f.images];
+      const [chosen] = images.splice(i, 1);
+      images.unshift(chosen);
+      return { ...f, images };
+    });
   };
 
   const uploadImage = async (file: File) => {
@@ -128,7 +166,7 @@ export default function AdminPage() {
       const res = await fetch("/api/upload", { method: "POST", body });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || "Upload failed");
-      setForm((f) => ({ ...f, imgId: data.url }));
+      setForm((f) => ({ ...f, images: [...f.images, data.url] }));
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Upload failed", 2600);
     } finally {
@@ -217,6 +255,66 @@ export default function AdminPage() {
       });
     return () => controller.abort();
   }, [view, authed, orderQuery, orderStatusFilter, orderPage]);
+
+  const REVIEW_PAGE_SIZE = 25;
+
+  // Same debounce/reset/abort shape as the orders list above.
+  useEffect(() => {
+    const t = setTimeout(() => setReviewSearch(reviewSearchInput.trim()), 350);
+    return () => clearTimeout(t);
+  }, [reviewSearchInput]);
+
+  useEffect(() => {
+    setReviewPage(1);
+  }, [reviewSearch, reviewRatingFilter]);
+
+  const loadReviews = useCallback(
+    (signal?: AbortSignal) => {
+      setReviewsLoading(true);
+      setReviewsError(false);
+      const params = new URLSearchParams();
+      if (reviewSearch) params.set("q", reviewSearch);
+      if (reviewRatingFilter) params.set("rating", reviewRatingFilter);
+      params.set("page", String(reviewPage));
+      params.set("pageSize", String(REVIEW_PAGE_SIZE));
+      return fetch(`/api/reviews?${params.toString()}`, { signal })
+        .then((r) => {
+          if (!r.ok) throw new Error(String(r.status));
+          return r.json();
+        })
+        .then((d) => {
+          setReviews(Array.isArray(d?.reviews) ? d.reviews : []);
+          setReviewTotal(typeof d?.total === "number" ? d.total : 0);
+          setReviewTotalPages(typeof d?.totalPages === "number" ? d.totalPages : 1);
+        })
+        .catch((e) => {
+          if (e?.name !== "AbortError") setReviewsError(true);
+        })
+        .finally(() => {
+          if (!signal?.aborted) setReviewsLoading(false);
+        });
+    },
+    [reviewSearch, reviewRatingFilter, reviewPage],
+  );
+
+  useEffect(() => {
+    if (view !== "reviews" || !authed) return;
+    const controller = new AbortController();
+    loadReviews(controller.signal);
+    return () => controller.abort();
+  }, [view, authed, loadReviews]);
+
+  const deleteReview = async (r: AdminReview) => {
+    if (!confirm(`Delete ${r.author}'s review of "${r.productName}"? This can't be undone.`)) return;
+    try {
+      const res = await fetch(`/api/reviews/${r.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(String(res.status));
+      showToast("Review deleted", 2200);
+      await loadReviews();
+    } catch {
+      showToast("Could not delete review", 2600);
+    }
+  };
 
   const updateOrderStatus = async (id: number, status: string) => {
     const prev = orders;
@@ -435,7 +533,7 @@ export default function AdminPage() {
       colors: p.colors.join(", "),
       tags: p.tags.join(", "),
       desc: desc(p),
-      imgId: p.imgId,
+      images: p.images?.length ? p.images : [p.imgId],
     });
     setVariantGrid(reconcileVariants(p.colors.join(", "), p.variants.map((v) => ({ color: v.color, size: v.size, stock: String(v.stock) }))));
     setView("add");
@@ -459,7 +557,7 @@ export default function AdminPage() {
             tags,
             variants,
             desc: form.desc,
-            imgId: form.imgId || undefined,
+            images: form.images,
           }),
         });
         if (!res.ok) throw new Error("Save failed");
@@ -477,7 +575,7 @@ export default function AdminPage() {
             cat: form.cat,
             price: Number(form.price) || 0,
             wasPrice: null,
-            imgId: form.imgId || ids[0],
+            images: form.images.length ? form.images : [ids[0]],
             colors,
             tags,
             rating: "4.6",
@@ -730,9 +828,10 @@ export default function AdminPage() {
                       }`,
                     )}
                   >
-                    <div style={s("width:40px;height:50px;border-radius:7px;overflow:hidden;background:#f1ece2")}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={img(p.imgId, 120)} alt="" style={s("width:100%;height:100%;object-fit:cover")} />
+                    <div
+                      style={s("position:relative;width:40px;height:50px;border-radius:7px;overflow:hidden;background:#f1ece2")}
+                    >
+                      <Image src={img(p.imgId, 120)} alt="" fill sizes="40px" style={s("object-fit:cover")} />
                     </div>
                     <div>
                       <div style={s("font-weight:500;display:flex;align-items:center;gap:7px")}>
@@ -806,14 +905,42 @@ export default function AdminPage() {
                 />
               </div>
               <div style={s("display:flex;flex-direction:column;gap:6px")}>
-                <label style={s("font-size:12.5px;font-weight:500;color:#5f5a52")}>Product image</label>
-                <div style={s("display:flex;align-items:center;gap:14px")}>
-                  {form.imgId ? (
-                    <div style={s("width:56px;height:70px;border-radius:8px;overflow:hidden;background:#f1ece2;flex-shrink:0")}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={img(form.imgId, 160)} alt="" style={s("width:100%;height:100%;object-fit:cover")} />
-                    </div>
-                  ) : null}
+                <label style={s("font-size:12.5px;font-weight:500;color:#5f5a52")}>
+                  Product images{" "}
+                  <span style={s("color:#9a948a;font-weight:400")}>(first image is the cover shown in the shop)</span>
+                </label>
+                {form.images.length ? (
+                  <div style={s("display:flex;flex-wrap:wrap;gap:12px")}>
+                    {form.images.map((imgSrc, i) => (
+                      <div key={i} style={s("display:flex;flex-direction:column;gap:5px;align-items:center")}>
+                        <div
+                          style={s(
+                            `position:relative;width:70px;height:88px;border-radius:8px;overflow:hidden;background:#f1ece2;border:2px solid ${
+                              i === 0 ? "#1a1714" : "transparent"
+                            }`,
+                          )}
+                        >
+                          <Image src={img(imgSrc, 160)} alt="" fill sizes="70px" style={s("object-fit:cover")} />
+                        </div>
+                        <div style={s("display:flex;gap:6px;font-size:11px")}>
+                          {i !== 0 ? (
+                            <span onClick={() => setCoverImage(i)} style={s("color:#c2410c;cursor:pointer")}>
+                              Set cover
+                            </span>
+                          ) : (
+                            <span style={s("color:#9a948a")}>Cover</span>
+                          )}
+                          <span onClick={() => removeImage(i)} style={s("color:#9a948a;cursor:pointer")}>
+                            Remove
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <span style={s("font-size:12.5px;color:#9a948a")}>No images yet.</span>
+                )}
+                <div style={s("display:flex;align-items:center;gap:14px;margin-top:4px")}>
                   <input
                     type="file"
                     accept="image/png,image/jpeg,image/webp,image/gif"
@@ -1117,6 +1244,160 @@ export default function AdminPage() {
                     Next →
                   </button>
                 </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {view === "reviews" ? (
+          <div style={s("animation:gbFade .4s both")}>
+            <div style={s("display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;flex-wrap:wrap;gap:14px")}>
+              <div>
+                <h1 style={s("font-size:26px;font-weight:600;letter-spacing:-.02em;margin:0")}>Reviews</h1>
+                <p style={s("font-size:13.5px;color:#8a8275;margin:5px 0 0")}>
+                  {`${reviewTotal} total`} · deleting a review recalculates that product&apos;s rating
+                </p>
+              </div>
+              <div style={s("display:flex;gap:12px")}>
+                <div style={s("display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #e0d9cc;border-radius:9px;padding:9px 13px;width:250px")}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9a9388" strokeWidth="2">
+                    <circle cx="11" cy="11" r="7" />
+                    <line x1="21" y1="21" x2="16.5" y2="16.5" />
+                  </svg>
+                  <input
+                    value={reviewSearchInput}
+                    onChange={(e) => setReviewSearchInput(e.target.value)}
+                    placeholder="Search text, author, email, product"
+                    style={s("border:none;background:transparent;font-size:13.5px;width:100%")}
+                  />
+                </div>
+                <select
+                  value={reviewRatingFilter}
+                  onChange={(e) => setReviewRatingFilter(e.target.value)}
+                  style={s("border:1px solid #e0d9cc;border-radius:9px;padding:9px 13px;font-size:13.5px;background:#fff;cursor:pointer")}
+                >
+                  <option value="">All ratings</option>
+                  {[5, 4, 3, 2, 1].map((n) => (
+                    <option key={n} value={String(n)}>
+                      {n} star{n === 1 ? "" : "s"}
+                    </option>
+                  ))}
+                </select>
+                <a
+                  href="/api/reviews/export"
+                  style={s(
+                    "display:inline-flex;align-items:center;border:1px solid #e0d9cc;background:#fff;border-radius:9px;padding:9px 16px;font-size:13.5px;color:#1a1714;text-decoration:none",
+                  )}
+                >
+                  Export CSV
+                </a>
+              </div>
+            </div>
+
+            <div style={s("background:#fff;border:1px solid #e7e0d3;border-radius:14px;overflow:hidden")}>
+              <div
+                style={s(
+                  `display:grid;grid-template-columns:${REVIEW_GRID};gap:14px;padding:13px 20px;border-bottom:1px solid #eee7db;font:500 11px 'Geist Mono',monospace;letter-spacing:.06em;color:#9a948a;text-transform:uppercase`,
+                )}
+              >
+                <span>Product</span>
+                <span>Author</span>
+                <span>Rating</span>
+                <span>Review</span>
+                <span>Date</span>
+                <span />
+              </div>
+
+              {reviewsLoading ? (
+                <div style={s("padding:26px 20px;color:#8a8275;font-size:13.5px")}>Loading reviews…</div>
+              ) : reviewsError ? (
+                <div style={s("padding:26px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap")}>
+                  <span style={s("color:#8a3a25;font-size:13.5px")}>Could not load reviews.</span>
+                  <button
+                    onClick={() => loadReviews()}
+                    style={s("background:#1a1714;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer")}
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : reviews.length === 0 ? (
+                <div style={s("padding:26px 20px;color:#8a8275;font-size:13.5px")}>
+                  {reviewSearch || reviewRatingFilter ? "No reviews match that filter." : "No customer reviews yet."}
+                </div>
+              ) : (
+                reviews.map((r) => (
+                  <div
+                    key={r.id}
+                    style={s(
+                      `display:grid;grid-template-columns:${REVIEW_GRID};gap:14px;padding:13px 20px;border-bottom:1px solid #f2ece1;align-items:center;font-size:13.5px`,
+                    )}
+                  >
+                    <span
+                      onClick={() => router.push(`/product/${r.productId}`)}
+                      style={s("cursor:pointer;color:#1a1714;font-weight:500")}
+                      title="View on the storefront"
+                    >
+                      {r.productName}
+                    </span>
+                    <span style={s("display:flex;flex-direction:column;gap:2px;min-width:0")}>
+                      <span style={s("font-weight:500")}>{r.author}</span>
+                      <span style={s("font:400 11px 'Geist Mono',monospace;color:#9a948a;overflow:hidden;text-overflow:ellipsis")}>
+                        {r.email}
+                      </span>
+                    </span>
+                    <span style={s("display:flex;align-items:center;gap:6px")}>
+                      <span style={s("color:#c2410c")}>{"★".repeat(r.rating)}</span>
+                      {r.verified ? (
+                        <span
+                          title="Verified purchase"
+                          style={s("font:500 9.5px 'Geist Mono',monospace;color:#1f513f;background:#e8f1ec;border-radius:4px;padding:2px 5px")}
+                        >
+                          ✓
+                        </span>
+                      ) : null}
+                    </span>
+                    <span style={s("min-width:0;color:#5f5a52")}>
+                      {r.title ? <strong style={s("color:#1a1714")}>{r.title}</strong> : null}
+                      {r.title && r.body ? " — " : ""}
+                      {r.body}
+                    </span>
+                    <span style={s("font:400 11.5px 'Geist Mono',monospace;color:#9a948a")}>
+                      {new Date(r.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
+                    </span>
+                    <span
+                      onClick={() => deleteReview(r)}
+                      style={s("cursor:pointer;color:#8a3a25;font-size:12.5px;justify-self:end")}
+                    >
+                      Delete
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {reviewTotalPages > 1 ? (
+              <div style={s("display:flex;justify-content:center;align-items:center;gap:14px;margin-top:20px")}>
+                <button
+                  onClick={() => setReviewPage((p) => Math.max(1, p - 1))}
+                  disabled={reviewPage <= 1}
+                  style={s(
+                    `border:1px solid #e0d9cc;background:#fff;border-radius:9px;padding:9px 16px;font-size:13.5px;cursor:${reviewPage <= 1 ? "default" : "pointer"};opacity:${reviewPage <= 1 ? ".45" : "1"}`,
+                  )}
+                >
+                  ← Prev
+                </button>
+                <span style={s("font:400 12.5px 'Geist Mono',monospace;color:#8a8275")}>
+                  Page {reviewPage} of {reviewTotalPages}
+                </span>
+                <button
+                  onClick={() => setReviewPage((p) => Math.min(reviewTotalPages, p + 1))}
+                  disabled={reviewPage >= reviewTotalPages}
+                  style={s(
+                    `border:1px solid #e0d9cc;background:#fff;border-radius:9px;padding:9px 16px;font-size:13.5px;cursor:${reviewPage >= reviewTotalPages ? "default" : "pointer"};opacity:${reviewPage >= reviewTotalPages ? ".45" : "1"}`,
+                  )}
+                >
+                  Next →
+                </button>
               </div>
             ) : null}
           </div>

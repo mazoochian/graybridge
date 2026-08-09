@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { s } from "@/lib/style";
 import { Hv } from "@/components/Hover";
@@ -17,7 +18,7 @@ export default function AboutPage() {
         <span style={s("font:500 12px 'Geist Mono',monospace;letter-spacing:.18em;color:#c2410c")}>
           EST. 2018 · PITTSBURGH, PA
         </span>
-        <h1 style={s("font-size:50px;line-height:1.05;letter-spacing:-.03em;font-weight:600;margin:0")}>
+        <h1 style={s("font-size:clamp(30px,9vw,50px);line-height:1.05;letter-spacing:-.03em;font-weight:600;margin:0")}>
           A small shop with a long view.
         </h1>
         <p style={s("font-size:18px;line-height:1.6;color:#5f5a52;margin:0;max-width:600px")}>
@@ -27,17 +28,26 @@ export default function AboutPage() {
       </section>
 
       <section style={s("max-width:1280px;margin:0 auto;padding:10px 28px 30px")}>
-        <div style={s("aspect-ratio:21/9;border-radius:22px;overflow:hidden;background:#eceae4;animation:gbScale .7s both")}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+        <div
+          style={s(
+            "position:relative;aspect-ratio:21/9;border-radius:22px;overflow:hidden;background:#eceae4;animation:gbScale .7s both",
+          )}
+        >
+          <Image
             src="https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?fm=jpg&q=70&w=1600&auto=format&fit=crop"
             alt="The Graybridge workshop"
-            style={s("width:100%;height:100%;object-fit:cover")}
+            fill
+            sizes="100vw"
+            priority
+            style={s("object-fit:cover")}
           />
         </div>
       </section>
 
-      <section style={s("max-width:1000px;margin:0 auto;padding:50px 28px;display:grid;grid-template-columns:repeat(3,1fr);gap:30px")}>
+      <section
+        className="gb-row-3"
+        style={s("max-width:1000px;margin:0 auto;padding:50px 28px;display:grid;gap:30px")}
+      >
         <div style={s("animation:gbFade .5s both")}>
           <div style={s("font:500 30px 'Geist Mono',monospace;color:#c2410c")}>2018</div>
           <div style={s("font-size:14px;color:#5f5a52;margin-top:6px;line-height:1.5")}>
@@ -59,16 +69,20 @@ export default function AboutPage() {
       </section>
 
       <section
-        style={s(
-          "max-width:980px;margin:0 auto;padding:20px 28px 30px;display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center",
-        )}
+        className="gb-split-even"
+        style={s("max-width:980px;margin:0 auto;padding:20px 28px 30px;display:grid;gap:48px;align-items:center")}
       >
-        <div style={s("aspect-ratio:4/5;border-radius:18px;overflow:hidden;background:#eceae4;animation:gbScale .6s both")}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+        <div
+          style={s(
+            "position:relative;aspect-ratio:4/5;border-radius:18px;overflow:hidden;background:#eceae4;animation:gbScale .6s both",
+          )}
+        >
+          <Image
             src="https://images.unsplash.com/photo-1490481651871-ab68de25d43d?fm=jpg&q=70&w=900&auto=format&fit=crop"
             alt="On the floor"
-            style={s("width:100%;height:100%;object-fit:cover")}
+            fill
+            sizes="(max-width: 760px) 100vw, 480px"
+            style={s("object-fit:cover")}
           />
         </div>
         <div style={s("display:flex;flex-direction:column;gap:18px;animation:gbFade .6s both")}>

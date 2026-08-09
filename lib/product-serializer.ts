@@ -2,6 +2,7 @@ import type { Product as DbProduct, ProductVariant as DbVariant } from "@/lib/ge
 import type { Product } from "@/lib/catalog";
 
 export function serializeProduct(row: DbProduct & { variants?: DbVariant[] }): Product {
+  const images: string[] = row.images ? JSON.parse(row.images) : [];
   return {
     id: row.id,
     name: row.name,
@@ -9,6 +10,7 @@ export function serializeProduct(row: DbProduct & { variants?: DbVariant[] }): P
     price: row.price,
     wasPrice: row.wasPrice,
     imgId: row.imgId,
+    images: images.length ? images : [row.imgId],
     colors: JSON.parse(row.colors),
     tags: JSON.parse(row.tags),
     rating: row.rating,

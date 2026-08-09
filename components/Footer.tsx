@@ -46,16 +46,27 @@ export function Footer() {
               <div onClick={go("/about")} style={s("cursor:pointer")}>
                 About us
               </div>
-              <div>Journal</div>
-              <div>Stores</div>
-              <div>Careers</div>
+              {/* Journal/Stores/Careers were listed here but no such pages
+                  exist — removed rather than left as dead text. Re-add
+                  alongside the real page. */}
+              <div onClick={go("/contact")} style={s("cursor:pointer")}>
+                Contact
+              </div>
             </div>
             <div>
               <div style={s("color:#fff;font-weight:500;margin-bottom:6px")}>Help</div>
-              <div>Shipping</div>
-              <div>Returns</div>
-              <div>Size guide</div>
-              <div>Contact</div>
+              <div onClick={go("/shipping")} style={s("cursor:pointer")}>
+                Shipping
+              </div>
+              <div onClick={go("/returns")} style={s("cursor:pointer")}>
+                Returns
+              </div>
+              <div onClick={go("/size-guide")} style={s("cursor:pointer")}>
+                Size guide
+              </div>
+              <div onClick={go("/contact")} style={s("cursor:pointer")}>
+                Contact
+              </div>
             </div>
           </div>
         </div>
@@ -68,9 +79,12 @@ export function Footer() {
             © 2026 Graybridge Supply Co. · 2231 Penn Avenue, Pittsburgh, PA
           </span>
           <div style={s("display:flex;gap:20px;font-size:12.5px;color:#9a948a")}>
-            <span>Privacy</span>
-            <span>Terms</span>
-            <span>Accessibility</span>
+            <span onClick={go("/privacy")} style={s("cursor:pointer")}>
+              Privacy
+            </span>
+            <span onClick={go("/terms")} style={s("cursor:pointer")}>
+              Terms
+            </span>
           </div>
         </div>
       </div>

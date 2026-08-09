@@ -41,6 +41,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.price != null) data.price = Number(body.price);
   if (body.wasPrice !== undefined) data.wasPrice = body.wasPrice != null ? Number(body.wasPrice) : null;
   if (typeof body.imgId === "string") data.imgId = body.imgId;
+  if (Array.isArray(body.images)) {
+    const images = body.images.filter((x: unknown): x is string => typeof x === "string");
+    data.images = JSON.stringify(images);
+    if (images.length) data.imgId = images[0];
+  }
   if (Array.isArray(body.colors)) data.colors = JSON.stringify(body.colors);
   if (Array.isArray(body.tags)) data.tags = JSON.stringify(body.tags);
   if (typeof body.desc === "string") data.desc = body.desc;
