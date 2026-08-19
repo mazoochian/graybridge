@@ -25,3 +25,5 @@ next-env.d.ts
 /.windsurf/skills
 
 /lib/generated/prisma
+
+CLAUDE.md
