@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionFromRequest } from "@/lib/auth";
+import { getAdminFromRequest } from "@/lib/auth";
 import { recomputeReviewAggregates } from "@/lib/review-aggregates";
 
 /**
@@ -9,8 +9,8 @@ import { recomputeReviewAggregates } from "@/lib/review-aggregates";
  * /api/products/[id]/reviews only ever removes the caller's own.)
  */
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSessionFromRequest(req);
-  if (!session) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const admin = await getAdminFromRequest(req);
+  if (!admin) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
   const id = Number((await params).id);
   if (!Number.isInteger(id)) {

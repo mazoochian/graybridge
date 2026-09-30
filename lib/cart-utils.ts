@@ -19,7 +19,7 @@ export function cartLines(cart: CartItem[], catalog: Product[]): CartLine[] {
       key: c.key,
       id: c.id,
       name: p ? p.name : "Item",
-      meta: (p ? p.cat : "") + " · Size " + c.size,
+      meta: (p ? p.cat : "") + (c.color ? " · " + c.color : "") + " · Size " + c.size,
       qty: c.qty,
       img: img(p ? p.imgId : "", 200),
       lineStr: "$" + price * c.qty,

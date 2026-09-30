@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionFromRequest } from "@/lib/auth";
+import { getAdminFromRequest } from "@/lib/auth";
 
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 25;
@@ -12,8 +12,8 @@ const DEFAULT_PAGE_SIZE = 25;
  * so abuse can be traced back to an account.
  */
 export async function GET(req: NextRequest) {
-  const session = await getSessionFromRequest(req);
-  if (!session) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const admin = await getAdminFromRequest(req);
+  if (!admin) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
   const url = new URL(req.url);
   const q = (url.searchParams.get("q") ?? "").trim();

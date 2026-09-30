@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionFromRequest } from "@/lib/auth";
+import { getAdminFromRequest } from "@/lib/auth";
 import { serializeOrder } from "@/lib/order-serializer";
 
 const ALLOWED_STATUSES = ["Processing", "Shipped", "Fulfilled", "Refunded"];
@@ -8,8 +8,8 @@ const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 25;
 
 export async function GET(req: NextRequest) {
-  const session = await getSessionFromRequest(req);
-  if (!session) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const admin = await getAdminFromRequest(req);
+  if (!admin) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
   const url = new URL(req.url);
   const q = (url.searchParams.get("q") ?? "").trim();
@@ -29,7 +29,8 @@ export async function GET(req: NextRequest) {
 
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-  const [orders, total, recent] = await Promise.all([
+  const recentWhere = { createdAt: { gte: since }, paymentStatus: "paid" };
+  const [orders, total, recentAgg, recentUnits] = await Promise.all([
     prisma.order.findMany({
       where,
       include: { items: true },
@@ -40,12 +41,15 @@ export async function GET(req: NextRequest) {
     prisma.order.count({ where }),
     // 30-day KPI cards are deliberately unfiltered — they summarize the
     // whole store, not the current search/filter view.
-    prisma.order.findMany({ where: { createdAt: { gte: since }, paymentStatus: "paid" }, include: { items: true } }),
+    // Aggregated in Postgres rather than loading every order + item row of
+    // the last 30 days into memory on each dashboard load.
+    prisma.order.aggregate({ where: recentWhere, _sum: { total: true }, _count: { _all: true } }),
+    prisma.orderItem.aggregate({ where: { order: recentWhere }, _sum: { qty: true } }),
   ]);
 
-  const revenue30d = recent.reduce((n, o) => n + o.total, 0);
-  const orders30d = recent.length;
-  const units30d = recent.reduce((n, o) => n + o.items.reduce((m, i) => m + i.qty, 0), 0);
+  const revenue30d = recentAgg._sum.total ?? 0;
+  const orders30d = recentAgg._count._all;
+  const units30d = recentUnits._sum.qty ?? 0;
   const aov30d = orders30d ? revenue30d / orders30d : 0;
 
   return NextResponse.json({

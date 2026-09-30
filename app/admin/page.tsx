@@ -111,7 +111,7 @@ const REVIEW_GRID = "1.4fr 1fr .7fr 2fr .8fr .5fr";
 
 export default function AdminPage() {
   const router = useRouter();
-  const { catalog, setCatalog, showToast } = useStore();
+  const { catalog, setCatalog, showToast, reloadCatalog } = useStore();
 
   const [authed, setAuthed] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
@@ -497,6 +497,17 @@ export default function AdminPage() {
       }
       setAuthed(true);
       setView("products");
+      // The login response doesn't carry the role, and the app-wide catalog
+      // was fetched anonymously (archived products excluded) — refresh both
+      // so owner-only views and archived products show without a reload.
+      fetch("/api/auth/me")
+        .then((r) => r.json())
+        .then((d) => {
+          setAdminUsername(d?.username ?? "");
+          setAdminRole(d?.role ?? "staff");
+        })
+        .catch(() => {});
+      reloadCatalog();
     } catch {
       setLoginErr("Could not reach the server.");
     } finally {

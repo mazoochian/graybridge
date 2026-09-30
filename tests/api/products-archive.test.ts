@@ -1,9 +1,23 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, afterAll } from "vitest";
 import { GET as productsGet } from "@/app/api/products/route";
 import { DELETE as productDelete, PATCH as productPatch } from "@/app/api/products/[id]/route";
-import { createTestProduct, deleteTestProduct, getRequest, jsonRequest, adminAuthHeaders } from "../helpers";
+import { prisma } from "@/lib/prisma";
+import { createTestAdmin, createTestProduct, deleteTestProduct, getRequest, jsonRequest, adminAuthHeaders } from "../helpers";
 
 const LIST_URL = "http://localhost/api/products";
+
+// Admin routes look the account up on every request, so tokens must
+// belong to a real admin row.
+const adminIds: number[] = [];
+async function realAdminHeaders() {
+  const admin = await createTestAdmin();
+  adminIds.push(admin.id);
+  return adminAuthHeaders(admin.username);
+}
+
+afterAll(async () => {
+  await prisma.adminUser.deleteMany({ where: { id: { in: adminIds } } });
+});
 
 describe("product soft delete (archive)", () => {
   let productId: number | undefined;
@@ -17,7 +31,7 @@ describe("product soft delete (archive)", () => {
     const { product } = await createTestProduct();
     productId = product.id;
 
-    const authHeaders = await adminAuthHeaders("archive-tester");
+    const authHeaders = await realAdminHeaders();
     const archiveRes = await productDelete(getRequest(`http://localhost/api/products/${product.id}`, { headers: authHeaders }), {
       params: Promise.resolve({ id: String(product.id) }),
     });
@@ -47,7 +61,7 @@ describe("product soft delete (archive)", () => {
   it("can be restored via PATCH { archived: false }", async () => {
     const { product } = await createTestProduct();
     productId = product.id;
-    const authHeaders = await adminAuthHeaders("archive-tester-2");
+    const authHeaders = await realAdminHeaders();
 
     await productDelete(getRequest(`http://localhost/api/products/${product.id}`, { headers: authHeaders }), {
       params: Promise.resolve({ id: String(product.id) }),
@@ -68,7 +82,7 @@ describe("product soft delete (archive)", () => {
   it("archiving a product does not delete its row (order history stays intact)", async () => {
     const { product } = await createTestProduct();
     productId = product.id;
-    const authHeaders = await adminAuthHeaders("archive-tester-3");
+    const authHeaders = await realAdminHeaders();
 
     await productDelete(getRequest(`http://localhost/api/products/${product.id}`, { headers: authHeaders }), {
       params: Promise.resolve({ id: String(product.id) }),

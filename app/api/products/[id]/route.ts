@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionFromRequest } from "@/lib/auth";
+import { getAdminFromRequest } from "@/lib/auth";
 import { serializeProduct } from "@/lib/product-serializer";
 
 interface VariantInput {
@@ -28,8 +28,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSessionFromRequest(req);
-  if (!session) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const admin = await getAdminFromRequest(req);
+  if (!admin) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
   const id = Number((await params).id);
   const body = await req.json().catch(() => null);
@@ -82,8 +82,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
  * visible (and restorable) in the admin dashboard.
  */
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSessionFromRequest(req);
-  if (!session) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const admin = await getAdminFromRequest(req);
+  if (!admin) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
   const id = Number((await params).id);
   try {

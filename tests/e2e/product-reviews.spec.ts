@@ -150,8 +150,13 @@ test("the rating summary shows a distribution, and helpful votes work across cus
   // exact:true so this doesn't also match the "Edit your review" button.
   await expect(reviewsB.getByText("Your review", { exact: true })).toBeVisible();
 
+  // The button flips optimistically, before the vote request completes —
+  // wait for the server to confirm it, or the reload below can abort the
+  // in-flight POST and the vote is never saved.
+  const voteSaved = pageB.waitForResponse((r) => r.url().includes("/helpful") && r.request().method() === "POST");
   await helpfulButtons.first().click();
   await expect(reviewsB.getByRole("button", { name: /helpful/i })).toHaveAttribute("aria-pressed", "true");
+  expect((await voteSaved).ok()).toBe(true);
 
   // The vote persists and pushes that review to the top of the list.
   await pageB.reload();

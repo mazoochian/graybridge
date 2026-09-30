@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionFromRequest } from "@/lib/auth";
+import { getAdminFromRequest } from "@/lib/auth";
 import { parseCsv } from "@/lib/csv";
 import { distributeVariants } from "@/lib/catalog";
 
@@ -12,8 +12,8 @@ function col(headers: string[], row: string[], name: string): string {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getSessionFromRequest(req);
-  if (!session) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const admin = await getAdminFromRequest(req);
+  if (!admin) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");
@@ -63,7 +63,13 @@ export async function POST(req: NextRequest) {
       if (colors) data.colors = JSON.stringify(colors);
       if (tags) data.tags = JSON.stringify(tags);
       if (desc) data.desc = desc;
-      if (imgId) data.imgId = imgId;
+      if (imgId) {
+        data.imgId = imgId;
+        // images[0] is the cover and must track imgId (see schema) —
+        // otherwise the product page gallery keeps showing the old cover.
+        const prevImages: string[] = existing ? JSON.parse(existing.images || "[]") : [];
+        data.images = JSON.stringify([imgId, ...prevImages.slice(1).filter((x) => x !== imgId)]);
+      }
 
       let productId: number;
       if (existing) {

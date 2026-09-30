@@ -233,7 +233,7 @@ through the one function.
 
 Both login routes now check two independent limits before touching the
 DB or bcrypt:
-- **Per source IP** (`x-forwarded-for` / `x-real-ip`, falls back to
+- **Per source IP** (rightmost `x-forwarded-for` entry, then `x-real-ip`, falls back to
   `"unknown"`): 20 attempts / 15 min — throttles enumeration sweeps
   across many usernames from one IP.
 - **Per identifier** (username or email, case-normalized): 5 attempts /

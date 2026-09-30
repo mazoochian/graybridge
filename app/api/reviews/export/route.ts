@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionFromRequest } from "@/lib/auth";
-import { toCsvRow } from "@/lib/csv";
+import { getAdminFromRequest } from "@/lib/auth";
+import { neutralizeFormula, toCsvRow } from "@/lib/csv";
 
 const COLUMNS = [
   "id",
@@ -25,8 +25,8 @@ const COLUMNS = [
  * "Verified purchase" badge and the author attribution meaningless.
  */
 export async function GET(req: NextRequest) {
-  const session = await getSessionFromRequest(req);
-  if (!session) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const admin = await getAdminFromRequest(req);
+  if (!admin) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
   const rows = await prisma.review.findMany({
     orderBy: { id: "asc" },
@@ -44,13 +44,14 @@ export async function GET(req: NextRequest) {
         String(r.productId),
         r.product.sku,
         r.product.name,
-        r.customer.name,
-        r.customer.email,
+        // Author name, email, title and body are customer-supplied.
+        neutralizeFormula(r.customer.name),
+        neutralizeFormula(r.customer.email),
         String(r.rating),
         r.verified ? "yes" : "no",
         String(r.helpful),
-        r.title,
-        r.body,
+        neutralizeFormula(r.title),
+        neutralizeFormula(r.body),
         r.createdAt.toISOString(),
       ]),
     );

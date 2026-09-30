@@ -2,6 +2,9 @@ import type { MetadataRoute } from "next";
 
 const SITE_URL = process.env.SITE_URL || "http://localhost:3000";
 
+// Read SITE_URL at request time rather than baking in the build's value.
+export const dynamic = "force-dynamic";
+
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: {

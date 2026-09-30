@@ -31,10 +31,24 @@ export async function POST(req: NextRequest) {
 
   const passwordHash = await bcrypt.hash(password, 12);
   const customer = await prisma.$transaction(async (tx) => {
-    const updated = await tx.customer.update({ where: { id: record.customerId }, data: { passwordHash } });
-    await tx.passwordResetToken.update({ where: { id: record.id }, data: { usedAt: new Date() } });
-    return updated;
+    // Claim the token with a guarded update rather than trusting the read
+    // above: two concurrent submissions of the same link would otherwise
+    // both pass the usedAt check and both succeed.
+    const now = new Date();
+    const claimed = await tx.passwordResetToken.updateMany({
+      where: { id: record.id, usedAt: null, expiresAt: { gt: now } },
+      data: { usedAt: now },
+    });
+    if (claimed.count === 0) return null;
+    // Any other outstanding reset links for this account are now stale —
+    // retire them so an older email can't be used to reset again.
+    await tx.passwordResetToken.updateMany({
+      where: { customerId: record.customerId, usedAt: null },
+      data: { usedAt: now },
+    });
+    return tx.customer.update({ where: { id: record.customerId }, data: { passwordHash } });
   });
+  if (!customer) return NextResponse.json({ error: "Invalid or expired reset link." }, { status: 400 });
 
   const sessionToken = await signCustomerSession({ customerId: customer.id, email: customer.email });
   const res = NextResponse.json({ ok: true, name: customer.name, email: customer.email });

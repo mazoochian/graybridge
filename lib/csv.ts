@@ -1,10 +1,23 @@
 export function toCsvField(value: string): string {
-  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
+  // \r must be quoted too: rows are joined with \r\n, and parseCsv treats a
+  // bare \r as a row break.
+  if (/[",\r\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
   return value;
 }
 
 export function toCsvRow(fields: string[]): string {
   return fields.map(toCsvField).join(",");
+}
+
+/**
+ * Neutralizes spreadsheet formula injection ("CSV injection") for text
+ * that came from untrusted users: a cell starting with = + - @ (or a
+ * tab/CR) is evaluated as a formula by Excel/Sheets when the export is
+ * opened. Prefixing a single quote makes it display as plain text. Only
+ * for export-only data — it would not round-trip through the importer.
+ */
+export function neutralizeFormula(value: string): string {
+  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
 }
 
 /** Minimal RFC4180-ish CSV parser: handles quoted fields, embedded commas/newlines, doubled quotes. */
