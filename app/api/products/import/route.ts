@@ -63,7 +63,13 @@ export async function POST(req: NextRequest) {
       if (colors) data.colors = JSON.stringify(colors);
       if (tags) data.tags = JSON.stringify(tags);
       if (desc) data.desc = desc;
-      if (imgId) data.imgId = imgId;
+      if (imgId) {
+        data.imgId = imgId;
+        // images[0] is the cover and must track imgId (see schema) —
+        // otherwise the product page gallery keeps showing the old cover.
+        const prevImages: string[] = existing ? JSON.parse(existing.images || "[]") : [];
+        data.images = JSON.stringify([imgId, ...prevImages.slice(1).filter((x) => x !== imgId)]);
+      }
 
       let productId: number;
       if (existing) {
