@@ -171,7 +171,9 @@ export function Providers({ children }: { children: ReactNode }) {
   const addToCart = (id: number, size = "M", color = "") => {
     setCart((prev) => {
       const next = prev.map((c) => ({ ...c }));
-      const key = id + "_" + size;
+      // Color is part of the key: the same product/size in two colors must
+      // stay two lines, or the second add bumps the first color's qty.
+      const key = id + "_" + size + "_" + color;
       const ex = next.find((c) => c.key === key);
       if (ex) ex.qty++;
       else next.push({ key, id, size, color, qty: 1 });

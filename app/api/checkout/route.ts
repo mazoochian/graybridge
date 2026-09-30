@@ -64,7 +64,12 @@ export async function POST(req: NextRequest) {
   try {
     const result = await prisma.$transaction(async (tx) => {
       const ids = [...new Set(items.map((i) => i.id))];
-      const productRows = await tx.product.findMany({ where: { id: { in: ids } }, include: { variants: true } });
+      // Archived (soft-deleted) products are off sale even if a stale
+      // client-side cart still references them.
+      const productRows = await tx.product.findMany({
+        where: { id: { in: ids }, archived: false },
+        include: { variants: true },
+      });
       const products = productRows.map(serializeProduct);
       const productMap = new Map(products.map((p) => [p.id, p]));
 
@@ -93,7 +98,7 @@ export async function POST(req: NextRequest) {
       }
 
       const cartShaped: CartItem[] = items.map((i) => ({
-        key: `${i.id}_${i.size}`,
+        key: `${i.id}_${i.size}_${i.color}`,
         id: i.id,
         size: i.size,
         color: i.color,
@@ -111,6 +116,49 @@ export async function POST(req: NextRequest) {
       }
       const totals = discountAmount > 0 ? applyDiscount(baseTotals, discountAmount) : baseTotals;
 
+      for (const { id, size, color, qty } of requestedByVariant.values()) {
+        const p = productMap.get(id)!;
+        // Atomic guarded decrement: the WHERE clause (including stock >= qty)
+        // is evaluated by Postgres as part of the single UPDATE, so two
+        // concurrent checkouts on the same low-stock variant can't both pass.
+        // Whichever transaction commits first wins; the loser sees
+        // updatedCount === 0 and the whole checkout transaction aborts.
+        const updated = await tx.productVariant.updateMany({
+          where: { productId: id, size, color, stock: { gte: qty } },
+          data: { stock: { decrement: qty } },
+        });
+        if (updated.count === 0) {
+          throw new Error(`"${p.name}" (${color}, size ${size}) just sold out — please remove it from your bag.`);
+        }
+      }
+      for (const [id, qty] of requestedById) {
+        await tx.product.update({ where: { id }, data: { stock: { decrement: qty } } });
+      }
+
+      if (appliedCode) {
+        // Guarded increment, same idea as the stock decrement above: the
+        // usage-limit check in validateDiscountCode ran on a plain read, so
+        // two concurrent checkouts could both pass it for the last use.
+        // Re-checking active/expiry here also closes the window where an
+        // admin deactivates the code mid-checkout.
+        const used = await tx.discountCode.updateMany({
+          where: {
+            code: appliedCode,
+            active: true,
+            AND: [
+              { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+              { OR: [{ usageLimit: null }, { usageLimit: { gt: tx.discountCode.fields.usedCount } }] },
+            ],
+          },
+          data: { usedCount: { increment: 1 } },
+        });
+        if (used.count === 0) throw new Error("That code is no longer available.");
+      }
+
+      // Charge only after every stock/discount write above has succeeded,
+      // so a sold-out or exhausted-code failure can't happen after the
+      // customer has been charged. (A real processor still needs a
+      // void/refund path if the transaction fails to commit afterwards.)
       const charge = await chargeOrder(Math.round(totals.total * 100));
       if (!charge.ok) throw new Error("Payment failed.");
 
@@ -148,29 +196,6 @@ export async function POST(req: NextRequest) {
 
       const orderNumber = `GB-${ORDER_NUMBER_BASE + created.id}`;
       const order = await tx.order.update({ where: { id: created.id }, data: { orderNumber }, include: { items: true } });
-
-      for (const { id, size, color, qty } of requestedByVariant.values()) {
-        const p = productMap.get(id)!;
-        // Atomic guarded decrement: the WHERE clause (including stock >= qty)
-        // is evaluated by Postgres as part of the single UPDATE, so two
-        // concurrent checkouts on the same low-stock variant can't both pass.
-        // Whichever transaction commits first wins; the loser sees
-        // updatedCount === 0 and the whole checkout transaction aborts.
-        const updated = await tx.productVariant.updateMany({
-          where: { productId: id, size, color, stock: { gte: qty } },
-          data: { stock: { decrement: qty } },
-        });
-        if (updated.count === 0) {
-          throw new Error(`"${p.name}" (${color}, size ${size}) just sold out — please remove it from your bag.`);
-        }
-      }
-      for (const [id, qty] of requestedById) {
-        await tx.product.update({ where: { id }, data: { stock: { decrement: qty } } });
-      }
-
-      if (appliedCode) {
-        await tx.discountCode.update({ where: { code: appliedCode }, data: { usedCount: { increment: 1 } } });
-      }
 
       return { order, totals };
     });

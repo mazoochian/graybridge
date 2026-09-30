@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { applyDiscount, cartLines, cartTotals } from "@/lib/cart-utils";
 import { useStore } from "@/lib/store";
@@ -43,34 +43,50 @@ export default function CheckoutPage() {
   const [discountInput, setDiscountInput] = useState("");
   const [discountChecking, setDiscountChecking] = useState(false);
   const [discountError, setDiscountError] = useState("");
-  const [appliedDiscount, setAppliedDiscount] = useState<{ code: string; amount: number } | null>(null);
+  const [appliedDiscount, setAppliedDiscount] = useState<{ code: string; amount: number; subtotal: number } | null>(null);
+  // Set once an order is placed, so the empty-cart redirect below doesn't
+  // override the navigation to the success page after clearCart().
+  const orderPlaced = useRef(false);
 
   const lines = cartLines(cart, catalog);
   const baseTotals = cartTotals(cart, catalog);
   const totals = appliedDiscount ? applyDiscount(baseTotals, appliedDiscount.amount) : baseTotals;
 
-  const applyDiscountCode = async (e?: React.SyntheticEvent) => {
-    e?.preventDefault();
-    if (!discountInput.trim()) return;
+  const validateDiscount = async (code: string, subtotal: number) => {
     setDiscountChecking(true);
     setDiscountError("");
     try {
-      const res = await fetch(
-        `/api/discounts/validate?code=${encodeURIComponent(discountInput.trim())}&subtotal=${baseTotals.subtotal}`,
-      );
+      const res = await fetch(`/api/discounts/validate?code=${encodeURIComponent(code)}&subtotal=${subtotal}`);
       const data = await res.json().catch(() => ({}));
       if (!data?.valid) {
-        setDiscountError(data?.message || "That code isn't valid.");
+        setDiscountError(data?.message || data?.error || "That code isn't valid.");
         setAppliedDiscount(null);
         return;
       }
-      setAppliedDiscount({ code: data.normalizedCode, amount: data.discountAmount });
+      setAppliedDiscount({ code: data.normalizedCode, amount: data.discountAmount, subtotal });
     } catch {
       setDiscountError("Could not check that code.");
     } finally {
       setDiscountChecking(false);
     }
   };
+
+  const applyDiscountCode = async (e?: React.SyntheticEvent) => {
+    e?.preventDefault();
+    if (!discountInput.trim()) return;
+    await validateDiscount(discountInput.trim(), baseTotals.subtotal);
+  };
+
+  // The discount amount was computed against the subtotal at the time the
+  // code was applied. If the bag changes afterwards (the cart drawer is
+  // still usable here, and the catalog may finish loading late), re-check
+  // it so the total shown matches what the server will actually charge.
+  useEffect(() => {
+    if (appliedDiscount && appliedDiscount.subtotal !== baseTotals.subtotal) {
+      validateDiscount(appliedDiscount.code, baseTotals.subtotal);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseTotals.subtotal]);
 
   const removeDiscountCode = () => {
     setAppliedDiscount(null);
@@ -83,7 +99,7 @@ export default function CheckoutPage() {
     // trusting an empty cart — otherwise a hard refresh/direct load of
     // /checkout sees the initial empty [] for one tick and bounces to
     // /cart even when the cart actually has items.
-    if (cartHydrated && cart.length === 0) router.replace("/cart");
+    if (cartHydrated && cart.length === 0 && !orderPlaced.current) router.replace("/cart");
   }, [cartHydrated, cart.length, router]);
 
   const field = (key: keyof FormState) => ({
@@ -121,6 +137,7 @@ export default function CheckoutPage() {
         setError(data?.error || "Could not place order.");
         return;
       }
+      orderPlaced.current = true;
       clearCart();
       router.push(`/checkout/success?order=${encodeURIComponent(data.orderNumber)}`);
     } catch {
