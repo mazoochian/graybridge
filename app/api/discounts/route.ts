@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionFromRequest } from "@/lib/auth";
+import { getAdminFromRequest } from "@/lib/auth";
 import { normalizeCode } from "@/lib/discount";
 
 export async function GET(req: NextRequest) {
-  const session = await getSessionFromRequest(req);
-  if (!session) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const admin = await getAdminFromRequest(req);
+  if (!admin) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
   const codes = await prisma.discountCode.findMany({ orderBy: { createdAt: "desc" } });
   return NextResponse.json(codes);
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getSessionFromRequest(req);
-  if (!session) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const admin = await getAdminFromRequest(req);
+  if (!admin) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
   const body = await req.json().catch(() => null);
   const code = normalizeCode(typeof body?.code === "string" ? body.code : "");

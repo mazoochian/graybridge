@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { getSessionFromRequest } from "@/lib/auth";
+import { getAdminFromRequest } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -15,8 +15,8 @@ const EXT_BY_MIME: Record<string, string> = {
 };
 
 export async function POST(req: NextRequest) {
-  const session = await getSessionFromRequest(req);
-  if (!session) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const admin = await getAdminFromRequest(req);
+  if (!admin) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");

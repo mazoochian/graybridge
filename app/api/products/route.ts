@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionFromRequest } from "@/lib/auth";
+import { getAdminFromRequest } from "@/lib/auth";
 import { serializeProduct } from "@/lib/product-serializer";
 
 interface VariantInput {
@@ -27,8 +27,8 @@ export async function GET(req: NextRequest) {
   // Archived products are hidden from public storefront visitors, but the
   // admin dashboard (which reuses this same endpoint for its catalog
   // state) needs to see them too, so it can offer an "unarchive" action.
-  const session = await getSessionFromRequest(req);
-  const where: Record<string, unknown> = session ? {} : { archived: false };
+  const admin = await getAdminFromRequest(req);
+  const where: Record<string, unknown> = admin ? {} : { archived: false };
 
   const url = new URL(req.url);
   const cat = url.searchParams.get("cat") || "";
@@ -86,8 +86,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getSessionFromRequest(req);
-  if (!session) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const admin = await getAdminFromRequest(req);
+  if (!admin) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
   const body = await req.json().catch(() => null);
   const name = typeof body?.name === "string" ? body.name.trim() : "";

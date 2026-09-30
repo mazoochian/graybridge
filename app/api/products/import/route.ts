@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionFromRequest } from "@/lib/auth";
+import { getAdminFromRequest } from "@/lib/auth";
 import { parseCsv } from "@/lib/csv";
 import { distributeVariants } from "@/lib/catalog";
 
@@ -12,8 +12,8 @@ function col(headers: string[], row: string[], name: string): string {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getSessionFromRequest(req);
-  if (!session) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const admin = await getAdminFromRequest(req);
+  if (!admin) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");
