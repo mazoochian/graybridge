@@ -65,13 +65,23 @@ export function __resetRateLimitStoreForTests() {
   store.clear();
 }
 
+/**
+ * Best-effort client IP for rate-limit keys, assuming one reverse proxy in
+ * front of the app. X-Forwarded-For is read from the *right*: proxies
+ * append the address they actually saw (nginx's
+ * `$proxy_add_x_forwarded_for`, Caddy, Traefik all do by default), while
+ * everything to its left is whatever the client chose to send. Taking the
+ * leftmost entry would let a client rotate a fake value on every request
+ * and bypass the per-IP limits. X-Real-IP is only a fallback, since it's
+ * client-controlled unless the proxy is configured to overwrite it.
+ */
 export function getClientIp(req: NextRequest | Request): string {
   const xff = req.headers.get("x-forwarded-for");
   if (xff) {
-    const first = xff.split(",")[0]?.trim();
-    if (first) return first;
+    const last = xff.split(",").map((s) => s.trim()).filter(Boolean).pop();
+    if (last) return last;
   }
-  const real = req.headers.get("x-real-ip");
-  if (real) return real.trim();
+  const real = req.headers.get("x-real-ip")?.trim();
+  if (real) return real;
   return "unknown";
 }
