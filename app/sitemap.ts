@@ -3,6 +3,12 @@ import { prisma } from "@/lib/prisma";
 
 const SITE_URL = process.env.SITE_URL || "http://localhost:3000";
 
+// Render per request, not at build time: prerendering would bake in the
+// build machine's SITE_URL and product list (new products would never
+// appear), and would need a reachable database during `docker build`,
+// which only has a placeholder DATABASE_URL (see Dockerfile).
+export const dynamic = "force-dynamic";
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const products = await prisma.product.findMany({
     where: { archived: false },

@@ -10,7 +10,8 @@
 # deployment.
 #
 # Build:  docker build -t graybridge .
-# Run:    docker run -p 3000:3000 --env-file .env.production graybridge
+# Run:    docker run -p 3000:3000 --env-file .env.production \
+#           -v graybridge-uploads:/app/uploads graybridge
 #
 # Database migrations are NOT run automatically on container start (see
 # CMD at the bottom), and the final runner image below deliberately does
@@ -78,6 +79,15 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 # check invoked directly, see package.json), so Next's file tracing
 # doesn't pick it up automatically — copy it in explicitly.
 COPY --from=builder /app/scripts ./scripts
+
+# Admin image uploads (app/api/upload) are written at runtime by the
+# unprivileged `nextjs` user, but everything COPY'd above is root-owned —
+# create the directory it writes to with the right owner, and declare it
+# a volume so uploads survive container rebuilds/redeploys. Mount real
+# storage here, e.g. `-v graybridge-uploads:/app/uploads`.
+ENV UPLOAD_DIR=/app/uploads
+RUN mkdir -p /app/uploads && chown nextjs:nodejs /app/uploads
+VOLUME ["/app/uploads"]
 
 USER nextjs
 
